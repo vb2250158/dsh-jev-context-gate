@@ -24,10 +24,22 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
   const [loadingCatalog, setLoadingCatalog] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [saveError, setSaveError] = React.useState<string>()
+  const [rulesText, setRulesText] = React.useState('')
+  const [rulesError, setRulesError] = React.useState<string>()
   const savingRef = React.useRef(false)
   const request = React.useRef(0)
   React.useEffect(() => () => { request.current += 1 }, [])
   const writable = snapshot.writable && snapshot.status === 'ready' && current !== undefined && !saving
+  React.useEffect(() => { if (current && rulesText === '') setRulesText(JSON.stringify(current.rules, null, 2)) }, [current, rulesText])
+  const saveRules = (): void => {
+    if (!writable) return
+    try {
+      const parsed = JSON.parse(rulesText)
+      if (!Array.isArray(parsed)) throw new Error('规则必须是数组。')
+      setRulesError(undefined)
+      patch({ rules: parsed })
+    } catch (error) { setRulesError(error instanceof Error ? error.message : String(error)) }
+  }
   const refreshCatalog = (): void => {
     const generation = ++request.current
     setLoadingCatalog(true)
@@ -88,7 +100,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
       {catalog && models.length === 0 && <p className={styles.note}>目录暂无可选模型；已有配置不会被自动清除。</p>}
       <p className={styles.note}>目录仅供选择参考；未列出的已保存模型不代表不可用。选择不会发起模型测试。</p>
       <div className={styles.test}>
-        <h3>规则预览（非模型测试）</h3>
+        <h3>规则编辑</h3><textarea className={styles.editor} aria-label="规则 JSON" value={rulesText} disabled={!writable} onChange={event => setRulesText(event.currentTarget.value)} /><div className={styles.actions}><Button variant="primary" size="sm" disabled={!writable || !rulesText.trim()} onClick={saveRules}>保存规则</Button></div>{rulesError && <p className={styles.error} role="alert">规则 JSON 无效：{rulesError}</p>}</div><div className={styles.test}><h3>规则预览（非模型测试）</h3>
         <Input aria-label="预览备注，不参与判定" value={input} placeholder="可选备注，不参与规则判定" onChange={event => setInput(event.currentTarget.value)} />
         <div className={styles.actions}><Button variant="outline" size="sm" onClick={() => setPhase(phase === 'before' ? 'after' : 'before')}>查看阶段：{phase === 'before' ? '前置' : '后置（未实现）'}</Button></div>
         <p className={styles.note}>以下仅列出本阶段已启用的配置规则，不表示规则命中。{input ? `备注：${input}` : ''}</p>

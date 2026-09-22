@@ -7,3 +7,4 @@
 .error { margin:0; color:var(--dsw-alias-label-error); line-height:1.5; }
 .actions { display:flex; gap:8px; flex-wrap:wrap; }
 .result { margin:0; max-height:240px; overflow:auto; padding:10px; border-radius:8px; background:var(--dsw-alias-bg-layer-1); color:var(--dsw-alias-label-secondary); white-space:pre-wrap; }
+.editor { min-height:180px; resize:vertical; padding:10px; border:1px solid var(--dsw-alias-border-l2); border-radius:8px; background:var(--dsw-alias-bg-layer-1); color:var(--dsw-alias-label-primary); font:12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
