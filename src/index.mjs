@@ -45,8 +45,15 @@ export function apply(ctx, config = {}) {
         if (result.status === 'unsupported' && result.correction) {
           let inserted = false;
           for (const chunk of chunks) {
-            if (!inserted && chunk.type === 'text-delta') { yield { ...chunk, text: `${chunk.text}\n\n[证据约束]\n${result.correction}` }; inserted = true; }
-            else yield chunk;
+            if (chunk.type === 'finish' && !inserted) {
+              const index = chunks.reduce((max, row) => Math.max(max, 'index' in row ? row.index : -1), -1) + 1;
+              const text = `[证据约束]\n${result.correction}`;
+              yield { type: 'block-start', index, blockType: 'text' };
+              yield { type: 'text-delta', index, text };
+              yield { type: 'block-end', index, block: { type: 'text', text } };
+              inserted = true;
+            }
+            yield chunk;
           }
           return;
         }
