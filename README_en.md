@@ -6,7 +6,7 @@ An independent open-source DSH plugin that applies data-driven preflight rules b
 
 ## Status
 
-`0.1.0` is the first development baseline. The rule interpreter, DSH settings namespace, Jev settings page and preview-only test panel exist. A native Jev provider protocol, evidence-backed post-decision classification and full DSH composition acceptance are still in progress and are not reported as complete.
+`0.1.0` is the first development baseline. The rule interpreter, structured generic-model judge, pre-step injection, DSH settings namespace, Jev settings page, model catalog picker, JSON rule editor and host-evidence correction pure function exist. A native Jev provider protocol, live settings-page model test, post-stream wiring and full DSH composition acceptance remain in progress and are not reported as complete.
 
 ## Design
 
