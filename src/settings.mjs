@@ -1,0 +1,12 @@
+import z from '@deepseek-ai/schemastery';
+import { validateRules } from './policy.mjs';
+
+export const SETTINGS_NAMESPACE = 'jev-context-gate';
+export const defaultRules = Object.freeze([
+  { id: 'investigate-before-claim', enabled: true, phase: 'before', question: 'Does this request require inspecting evidence before assigning a cause?', context: 'Do not guess a root cause from a screenshot or description. Inspect the relevant source, configuration, logs, or runtime evidence first. Mark unverified ideas as hypotheses.', threshold: 0.8 },
+  { id: 'evidence-after-answer', enabled: true, phase: 'after', question: 'Does the candidate answer make a causal or completion claim unsupported by recorded evidence?', context: 'Before making a causal claim, compare it with the evidence actually gathered in this turn. If evidence is missing, state that it is unverified and continue investigation when an authorized next step exists.', threshold: 0.8 },
+]);
+export const DEFAULT_SETTINGS = { enabled: false, provider: '', model: '', nativeJev: true, beforeEnabled: true, afterEnabled: true, maxContextCharacters: 12000, maxCorrections: 2, rules: [...defaultRules] };
+const ruleSchema = z.object({ id: z.string().required(), enabled: z.boolean().default(true), phase: z.enum(['before', 'after']).required(), question: z.string().required(), context: z.string().required(), threshold: z.number().min(0).max(1).default(0.8) });
+export const SettingsSchema = z.transform(z.object({ enabled: z.boolean().default(false), provider: z.string().default(''), model: z.string().default(''), nativeJev: z.boolean().default(true), beforeEnabled: z.boolean().default(true), afterEnabled: z.boolean().default(true), maxContextCharacters: z.number().step(1).min(0).max(64000).default(12000), maxCorrections: z.number().step(1).min(0).max(8).default(2), rules: z.array(ruleSchema).default([...defaultRules]) }), value => { const rules = validateRules(value.rules); return { ...value, rules }; });
+export const Config = z.object({ enabled: z.boolean().default(false), provider: z.string().default(''), model: z.string().default(''), nativeJev: z.boolean().default(true), beforeEnabled: z.boolean().default(true), afterEnabled: z.boolean().default(true), maxContextCharacters: z.number().step(1).min(0).max(64000).default(12000), maxCorrections: z.number().step(1).min(0).max(8).default(2), rules: z.array(ruleSchema).default([...defaultRules]) });

@@ -1,0 +1,9 @@
+.section { display:grid; gap:14px; padding:8px 0 28px; color:var(--dsw-alias-label-primary); }
+.intro, .note { margin:0; color:var(--dsw-alias-label-secondary); line-height:1.5; }
+.row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:10px 0; border-bottom:1px solid var(--dsw-alias-border-l2); }
+.test { display:grid; gap:10px; padding:14px; border:1px solid var(--dsw-alias-border-l2); border-radius:12px; background:var(--dsw-alias-bg-layer-2); }
+.test h3 { margin:0; font-size:14px; }
+.field { display:grid; gap:8px; color:var(--dsw-alias-label-secondary); }
+.error { margin:0; color:var(--dsw-alias-label-error); line-height:1.5; }
+.actions { display:flex; gap:8px; flex-wrap:wrap; }
+.result { margin:0; max-height:240px; overflow:auto; padding:10px; border-radius:8px; background:var(--dsw-alias-bg-layer-1); color:var(--dsw-alias-label-secondary); white-space:pre-wrap; }
