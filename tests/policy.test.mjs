@@ -37,6 +37,9 @@ test('event, enabled state and exact context budget are respected', () => {
 test('legacy rule migrates to yes/no actions and invalid actions are rejected', () => {
   const legacy = { id: 'legacy', enabled: true, phase: 'before', question: '检查吗？', context: '检查', threshold: 0.8 };
   assert.equal(validateRules([legacy])[0].options[0].action.text, '检查');
+  assert.equal(validateRules([legacy])[0].description, '');
+  assert.equal(validateRules([{ ...rule, description: '可编辑的规则说明' }])[0].description, '可编辑的规则说明');
+  assert.throws(() => validateRules([{ ...rule, description: '长'.repeat(501) }]));
   assert.throws(() => validateRules([rule, rule]));
   assert.throws(() => validateRules([{ ...rule, options: [{ ...rule.options[0], action: { type: 'run-shell', text: 'x' } }, rule.options[1]] }]));
 });

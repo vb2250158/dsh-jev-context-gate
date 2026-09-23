@@ -5,7 +5,7 @@ import styles from './JevSettingsSection.module.css'
 export type Action = { type: 'none' | 'inject-context' | 'append-reminder'; text: string }
 export type RuleOption = { id: string; label: string; action: Action }
 export type Rule = {
-  id: string; enabled: boolean; phase: 'before' | 'after'; input: string; customInput: string
+  id: string; enabled: boolean; description: string; phase: 'before' | 'after'; input: string; customInput: string
   questionSource: 'configured' | 'script'; questionScript: string; question: string
   options: RuleOption[]; threshold: number
 }
@@ -63,30 +63,31 @@ export function JevRuleEditor({ rule, index, expanded, writable, update, remove,
     <div className={styles.ruleHeader}>
       <div className={styles.ruleSummary}>
         <div className={styles.ruleMeta}><span className={styles.ruleNumber}>规则 {index + 1}</span><span className={rule.phase === 'before' ? styles.phaseBefore : styles.phaseAfter}>{eventNames[rule.phase]}</span><span className={styles.threshold}>阈值 {rule.thresholdPercent || '—'}%</span></div>
-        <strong>{rule.questionSource === 'script' ? '脚本运行时生成题目' : rule.question.trim() || '未填写题目标题'}</strong>
-        <span className={styles.ruleSummarySub}>{inputNames[rule.input] ?? '待判断内容未设置'} · {rule.options.length} 个选项</span>
+        <strong>{rule.description.trim() || '未填写规则说明'}</strong>
+        <span className={styles.ruleSummarySub}>{rule.questionSource === 'script' ? '题目由脚本生成' : rule.question.trim() || '未填写题目'} · {inputNames[rule.input] ?? '待判断内容未设置'} · {rule.options.length} 个选项</span>
       </div>
       <div className={styles.ruleControls}><Switch checked={rule.enabled} disabled={!writable} label={`启用规则 ${index + 1}`} onChange={enabled => set({ enabled })} /><Button variant="outline" size="sm" aria-expanded={expanded} aria-controls={`jev-rule-${rule.id}`} onClick={toggle}>{expanded ? '收起' : '编辑'}</Button></div>
     </div>
     {expanded && <div className={styles.ruleBody} id={`jev-rule-${rule.id}`}>
-      <div className={styles.ruleStage}><div className={styles.stageHeading}><span>01</span><div><strong>事件</strong><small>事件发生时，开始这条规则的判断。</small></div></div>
+      <label className={styles.field}>规则说明<Input value={rule.description} maxLength={500} disabled={!writable} placeholder="用一句话说明这条规则的用途" onChange={event => set({ description: event.currentTarget.value })} /></label>
+      <div className={styles.ruleStage}><div className={styles.stageHeading}><strong>事件</strong></div>
         <Choice label="触发事件" value={rule.phase} disabled={!writable} choices={[{ id: 'before', label: eventNames.before }, { id: 'after', label: eventNames.after }]} onSelect={changeEvent} />
       </div>
-      <div className={styles.ruleStage}><div className={styles.stageHeading}><span>02</span><div><strong>待判断内容</strong><small>明确模型实际会看到哪段内容。</small></div></div>
+      <div className={styles.ruleStage}><div className={styles.stageHeading}><strong>待判断内容</strong></div>
         <Choice label="内容来源" value={rule.input} disabled={!writable} choices={rule.phase === 'before'
           ? [{ id: 'latest-user-message', label: inputNames['latest-user-message'] }, { id: 'current-context-text', label: inputNames['current-context-text'] }, { id: 'custom-text', label: inputNames['custom-text'] }]
           : [{ id: 'tool-results', label: inputNames['tool-results'] }, { id: 'custom-text', label: inputNames['custom-text'] }]} onSelect={input => set({ input })} />
-        <p className={styles.hint}>{sourceDescription}</p>
+        <details className={styles.helpDetails}><summary>实际读取什么内容？</summary><p>{sourceDescription}</p></details>
         {rule.input === 'custom-text' && <label className={styles.field}>自定义待判断内容<textarea className={styles.textarea} value={rule.customInput} maxLength={24000} disabled={!writable} rows={3} placeholder="输入每次事件发生时供判定的固定内容" onChange={event => set({ customInput: event.currentTarget.value })} /></label>}
       </div>
-      <div className={styles.ruleStage}><div className={styles.stageHeading}><span>03</span><div><strong>题目</strong><small>题目由标题和下方选项组成。</small></div></div>
+      <div className={styles.ruleStage}><div className={styles.stageHeading}><strong>题目</strong></div>
         <Choice label="题目来源" value={rule.questionSource} disabled={!writable} choices={[{ id: 'configured', label: '直接配置标题和选项' }, { id: 'script', label: '自定义生成脚本' }]} onSelect={value => set({ questionSource: value as DraftRule['questionSource'] })} />
         {rule.questionSource === 'configured' ? <label className={styles.field}>标题<Input value={rule.question} maxLength={8000} disabled={!writable} placeholder="例如：这条消息是否需要先检查证据？" onChange={event => set({ question: event.currentTarget.value })} /></label>
           : <><label className={styles.field}>题目生成脚本<textarea className={styles.codeArea} value={rule.questionScript} maxLength={16000} disabled={!writable} rows={7} spellCheck={false} placeholder={"// 可使用 event、input、options；支持 await import('node:fs/promises')\nreturn { title: '这条消息是否需要检查证据？', options }"} onChange={event => set({ questionScript: event.currentTarget.value })} /></label>
-            <p className={styles.hint}>脚本在本机工作线程执行，可读取文件。必须返回 <code>{'{ title, options: [{ id, label }] }'}</code>；选项 ID 要与下方一致。脚本只生成题目，不能改行为。</p></>}
-        <label className={styles.field}>执行行为所需的最低选项概率（%）<Input type="number" min="0" max="100" step="1" value={rule.thresholdPercent} disabled={!writable} onChange={event => set({ thresholdPercent: event.currentTarget.value })} /></label>
+            <details className={styles.helpDetails}><summary>脚本接口说明</summary><p>脚本在本机工作线程执行，可读取文件。返回 <code>{'{ title, options: [{ id, label }] }'}</code>；选项 ID 与下方一致。行为仍由规则配置决定。</p></details></>}
+        <label className={`${styles.field} ${styles.thresholdField}`}>执行行为的最低概率（%）<Input type="number" min="0" max="100" step="1" value={rule.thresholdPercent} disabled={!writable} onChange={event => set({ thresholdPercent: event.currentTarget.value })} /></label>
       </div>
-      <div className={styles.ruleStage}><div className={styles.stageHeading}><span>04</span><div><strong>选项与行为</strong><small>模型选中某项且达到阈值时，执行该选项的行为。</small></div></div>
+      <div className={styles.ruleStage}><div className={styles.stageHeading}><strong>选项与行为</strong></div>
         <div className={styles.ruleOptions}>{rule.options.map((option, optionIndex) => <div className={styles.ruleOption} key={option.id}>
           <div className={styles.optionTitle}><span className={styles.optionLetter}>{String.fromCharCode(65 + optionIndex)}</span><label className={styles.field}>选项文案<Input value={option.label} maxLength={800} disabled={!writable} aria-label={`规则 ${index + 1} 选项 ${optionIndex + 1}`} onChange={event => updateOption(option.id, { label: event.currentTarget.value })} /></label>
             {rule.phase === 'before' && <Button variant="ghost" size="sm" disabled={!writable || rule.options.length <= 2} onClick={() => set({ options: rule.options.filter(item => item.id !== option.id) })}>移除</Button>}</div>
@@ -98,7 +99,7 @@ export function JevRuleEditor({ rule, index, expanded, writable, update, remove,
         </div>)}</div>
         {rule.phase === 'before' && <Button variant="outline" size="sm" disabled={!writable || rule.options.length >= 16} onClick={() => set({ options: [...rule.options, { id: `option-${crypto.randomUUID().replaceAll('-', '')}`, label: '', action: { type: 'none', text: '' } }] })}>添加选项</Button>}
       </div>
-      <div className={styles.ruleFooter}><span>保存规则后才会生效。</span><Button variant="ghost" size="sm" disabled={!writable} onClick={remove}>删除规则</Button></div>
+      <div className={styles.ruleFooter}><Button variant="ghost" size="sm" disabled={!writable} onClick={remove}>删除规则</Button></div>
     </div>}
   </article>
 }

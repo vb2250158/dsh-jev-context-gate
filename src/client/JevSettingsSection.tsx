@@ -20,6 +20,7 @@ function validateDraft(rules: DraftRule[]): Rule[] {
   if (rules.length > 64) throw new Error('最多只能保存 64 条规则。')
   return rules.map((rule, index) => {
     const number = index + 1
+    if (rule.description.length > 500) throw new Error(`第 ${number} 条规则的说明不能超过 500 字。`)
     if (rule.questionSource === 'configured' && !rule.question.trim()) throw new Error(`第 ${number} 条规则缺少题目标题。`)
     if (rule.questionSource === 'script' && !rule.questionScript.trim()) throw new Error(`第 ${number} 条规则缺少题目生成脚本。`)
     if (rule.input === 'custom-text' && !rule.customInput.trim()) throw new Error(`第 ${number} 条规则缺少自定义待判断内容。`)
@@ -120,13 +121,13 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
   if (page === 'test') return <JevTestPage model={current} onBack={() => setPage('rules')} />
   return <section className={styles.section}>
     <header className={styles.pageHeader}>
-      <div><h2>Jev 规则配置</h2><p className={styles.intro}>选择判定模型，设置哪些消息需要判断，以及命中后补充什么内容。</p></div>
+      <div><h2>Jev 规则配置</h2></div>
       <div className={styles.headerActions}>{current && <span className={current.enabled ? styles.statusOn : styles.statusOff}>{current.enabled ? '已启用' : '未启用'}</span>}<Button variant="primary" size="sm" onClick={() => setPage('test')}>打开测试页面</Button></div>
     </header>
     {snapshot.status !== 'ready' || !current ? <p role="status">{snapshot.status === 'loading' ? '正在读取设置…' : '设置不可用，无法读取或保存。'}</p> : <>
       {!snapshot.writable && <p role="status">当前设置只读，无法保存修改。</p>}
       <div className={styles.panel}>
-        <div className={styles.sectionHeading}><h3>运行设置</h3><p>总开关控制所有已启用规则；判定模型独立于主会话模型。</p></div>
+        <div className={styles.sectionHeading}><h3>运行设置</h3></div>
         <div className={styles.row}><span>启用 Jev</span><Switch checked={current.enabled} disabled={!writable} label="启用 Jev" onChange={enabled => patch({ enabled })} /></div>
         <div className={styles.modelField}><span>判定模型</span>
           <Menu autoFocus portal open={modelMenuOpen && writable} onClose={() => setModelMenuOpen(false)}
@@ -152,7 +153,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
       </div>
 
       <div className={styles.panel}>
-        <div className={styles.sectionHeading}><h3>规则</h3><p>每条规则依次配置事件、待判断内容、题目和选项。行为设置在对应选项里。</p></div>
+        <div className={styles.sectionHeading}><h3>规则</h3></div>
         <div className={styles.ruleList}>{(draftRules ?? toDraft(current.rules)).map((rule, index) =>
           <JevRuleEditor key={rule.id} rule={rule} index={index} expanded={expandedIds.has(rule.id)} writable={writable}
             update={next => updateRule(rule.id, next)}
@@ -163,7 +164,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
         <div className={styles.ruleActions}>
           <Button variant="outline" size="sm" disabled={!writable || (draftRules?.length ?? 0) >= 64} onClick={() => {
             const id = `rule-${crypto.randomUUID().replaceAll('-', '')}`
-            setDraftRules(rules => [...(rules ?? []), { id, enabled: true, phase: 'before', input: 'latest-user-message', customInput: '',
+            setDraftRules(rules => [...(rules ?? []), { id, enabled: true, description: '', phase: 'before', input: 'latest-user-message', customInput: '',
               questionSource: 'configured', questionScript: '', question: '', thresholdPercent: '80',
               options: [{ id: 'yes', label: '是', action: { type: 'inject-context', text: '' } }, { id: 'no', label: '否', action: { type: 'none', text: '' } }] }])
             setExpandedIds(ids => new Set([...ids, id]))
