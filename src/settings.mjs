@@ -2,8 +2,8 @@ import z from '@deepseek-ai/schemastery';
 
 export const SETTINGS_NAMESPACE = 'jev-context-gate';
 export const defaultRules = Object.freeze([
-  { id: 'investigate-before-claim', enabled: true, phase: 'before', question: 'Does this request require inspecting evidence before assigning a cause?', context: 'Do not guess a root cause from a screenshot or description. Inspect the relevant source, configuration, logs, or runtime evidence first. Mark unverified ideas as hypotheses.', threshold: 0.8 },
-  { id: 'evidence-after-answer', enabled: true, phase: 'after', question: 'Does the candidate answer make a causal or completion claim unsupported by recorded evidence?', context: 'Before making a causal claim, compare it with the evidence actually gathered in this turn. If evidence is missing, state that it is unverified and continue investigation when an authorized next step exists.', threshold: 0.8 },
+  { id: 'investigate-before-claim', enabled: true, phase: 'before', question: '这项请求是否需要先检查证据，才能判断原因？', context: '不要仅凭截图或描述猜测根因。先检查相关源码、配置、日志或运行证据；尚未核实的判断要明确标为假设。', threshold: 0.8 },
+  { id: 'evidence-after-answer', enabled: true, phase: 'after', question: '候选回答是否提出了缺少记录证据支持的原因或完成结论？', context: '提出原因或完成结论前，对照本轮实际收集的证据。证据不足时，明确说明尚未核实；只要存在已获授权的下一步，就继续调查。', threshold: 0.8 },
 ]);
 export const DEFAULT_SETTINGS = { enabled: false, provider: '', model: '', nativeJev: true, beforeEnabled: true, afterEnabled: true, maxContextCharacters: 12000, maxCorrections: 2, rules: [...defaultRules] };
 const ruleSchema = z.object({ id: z.string().required(), enabled: z.boolean().default(true), phase: z.union([z.const('before'), z.const('after')]).required(), question: z.string().required(), context: z.string().required(), threshold: z.number().min(0).max(1).default(0.8) });

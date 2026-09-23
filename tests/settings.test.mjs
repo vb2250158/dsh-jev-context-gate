@@ -6,6 +6,8 @@ import { Config, DEFAULT_SETTINGS, SettingsSchema } from '../src/settings.mjs';
 test('the installed settings schema accepts default rules and rejects an invalid phase', () => {
   assert.deepEqual(Config({}), DEFAULT_SETTINGS);
   assert.equal(SettingsSchema({ rules: DEFAULT_SETTINGS.rules }).rules[0].phase, 'before');
+  assert.match(DEFAULT_SETTINGS.rules[0].question, /检查证据/);
+  assert.match(DEFAULT_SETTINGS.rules[0].context, /源码、配置、日志/);
   assert.throws(() => SettingsSchema({ rules: [{ ...DEFAULT_SETTINGS.rules[0], phase: 'execute' }] }));
 });
 
