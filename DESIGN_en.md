@@ -1,37 +1,21 @@
-# Jev Context Gate Design
+# Jev Rule Design
 
 English | [简体中文](DESIGN.md)
 
-Status: work in progress; installation and end-to-end acceptance depend on runtime evidence from the target environment.
+## Data and execution
 
-## Ownership
+DSH settings owns saved rules. A rule stores a stable ID, enabled state, event, input source, optional fixed input, question source, title or script, probability threshold, and 2–16 options with stable IDs, labels, and actions. Existing `phase/question/context/threshold` rules migrate when settings are read. Legacy `beforeEnabled/afterEnabled` fields remain readable; enabled rules control runtime.
 
-An independent DSH plugin, with no RabiRoute, Manager, persona or plan runtime dependency. Source belongs to its own Git repository. DSH settings owns user configuration. Installation uses a published fixed Git commit. The official checkout is inspected for contracts only.
+The `before` event reads the latest user text or text visible at `agent/pre-step` and appends the selected option's context before the main model request. The `after` event reads host tool-result IDs, failure status, and text at `llm/stream`; it buffers the original stream and appends the selected reminder before `finish`. It cannot retract content already displayed. Fixed custom input is used verbatim when its event occurs.
 
-## Data-driven rules
+A question script is trusted JavaScript saved in settings. It runs in a separate Node worker with a five-second timeout and 64 MiB old-generation limit. It can read files through Node APIs. It receives event, input, and option IDs/default labels and may return only a title and labels for those same IDs. The policy interpreter reads actions exclusively from saved rules, never from model or script output.
 
-Each rule contains a stable id, enabled flag, before/after phase, complete classification question, match-probability threshold and predefined context. Array order determines evaluation order. A total context budget includes wrappers; individual instructions are never truncated. Model output selects rules, not executable scripts, additional privileges or arbitrary replacement prompts. Runtime and test UI share the interpreter.
+An ordinary model returns JSON probabilities for every option of every active rule. IDs, ranges, and sums are validated. Only the highest-probability option above threshold acts, in rule order and within the context budget. Failures preserve the original decision or stream. Native Jev models are identified by model ID and reject the ordinary JSON path until a provider adapter exists.
 
-## Before
+## UI and testing
 
-After user submission and before the first main-model request, determine whether investigation and tool/skill guidance are required. Inject only matching rules. Guidance cannot authorize or install tools. Dynamic tool composition remains subject to the verified public DSH contract.
-
-## After
-
-Compare the actual user request, candidate answer and host-recorded tool results. Detect unsupported causal claims and hedged guesses used instead of available investigation. Self-reported work is not evidence; reading a file does not establish a claim.
-
-Check event timing against streaming visibility. A stop hook after displayed text is corrective continuation, not pre-publication interception. Never rewrite history. Bound corrections and respect cancellation, denied permissions and real blockers.
-
-## Models
-
-Use exact DSH provider/model routes without changing the main conversation model. IDs beginning with `jev-` automatically select native mode; other IDs select LLM JSON simulation. The legacy `nativeJev` setting remains readable but does not select a mode. Native Jev requires a provider adapter for its documented structured protocol, not chat JSON mislabeled as native Jev. Ordinary-model option probabilities are estimates; the UI computes normalized-entropy distribution concentration and labels it simulated confidence, never calibrated confidence. Invalid responses, timeouts and configuration changes are explicit; no silent model fallback.
-
-## Settings and testing
-
-Add a Jev settings entry with master switch, model picker, phase switches, editable rules, budgets and correction limits. Reuse the supported model catalog and picker extension; do not import private components.
-
-The first Jev Test surface accepts state text, one Choice question, and 2–16 options. Its Host route calls an ordinary model once under a constrained JSON protocol and shows option probabilities, the highest-probability option, simulated confidence, latency, and errors. Testing never injects into a real session or executes tools. Jev model IDs are labeled native and testing stays unavailable until a provider exposes structured calls. Test text is not automatically included in source or shared settings.
+Rule settings contain one master switch, a judge-model picker, and four-stage rule editing. Dynamic sources describe the exact runtime content; script mode states that the title and labels are generated at runtime. Actions and parameters belong to options. A separate test view within the settings section runs a disposable Choice request without changing a session. Ordinary models show option probabilities and distribution concentration, not calibrated confidence.
 
 ## Acceptance
 
-Structured-judge and rule tests, lifecycle cancellation/reentry, real composition loading, save conflicts, independent model selection, live model testing, light/dark/custom themes, disposal, publication screening and fixed-commit installation. Ten unit tests currently pass (six interpreter and four structured-judge); host composition, live model panel, post-answer evidence gate and installation acceptance remain incomplete.
+Check legacy migration, browser schema serialization, input sources, script file access and output restrictions, option actions, probability validation, context budget, build, pinned installation, installed artifacts, restarted DSH process, and real browser interaction.

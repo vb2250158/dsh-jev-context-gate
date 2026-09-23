@@ -1,5 +1,6 @@
 .section { display:grid; gap:18px; padding:8px 0 32px; color:var(--dsw-alias-label-primary); }
 .pageHeader { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+.headerActions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
 .pageHeader h2 { margin:0 0 6px; font-size:20px; line-height:1.35; }
 .intro, .note { margin:0; color:var(--dsw-alias-label-secondary); line-height:1.6; }
 .statusOn, .statusOff { flex:none; padding:5px 10px; border-radius:8px; font-size:12px; font-weight:600; line-height:1.4; }
@@ -16,12 +17,30 @@
 .ruleHeader { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px; }
 .ruleSummary { min-width:0; display:grid; gap:8px; }
 .ruleSummary strong { font-size:14px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
+.ruleSummarySub { font-size:12px; color:var(--dsw-alias-label-secondary); }
 .ruleMeta { display:flex; flex-wrap:wrap; align-items:center; gap:7px; font-size:12px; line-height:1.4; }
 .ruleNumber { font-weight:700; }
 .phaseBefore, .phaseAfter, .threshold { padding:3px 7px; border-radius:6px; color:var(--dsw-alias-label-secondary); background:var(--dsw-alias-bg-layer-2); }
 .phaseAfter { opacity:.75; }
 .ruleControls { display:flex; align-items:center; gap:9px; flex:none; }
 .ruleBody { display:grid; gap:14px; padding:16px; border-top:0.5px solid var(--dsw-alias-border-l2); }
+.ruleStage { display:grid; gap:12px; padding:16px; border:0.5px solid var(--dsw-alias-border-l2); border-radius:10px; background:var(--dsw-alias-bg-layer-2); }
+.stageHeading { display:flex; gap:12px; align-items:flex-start; }
+.stageHeading > span { display:grid; place-items:center; flex:none; width:28px; height:28px; border-radius:8px; background:var(--dsw-alias-bg-layer-3); color:var(--dsw-alias-label-secondary); font-size:11px; font-weight:700; }
+.stageHeading > div { display:grid; gap:2px; }
+.stageHeading strong { color:var(--dsw-alias-label-primary); font-size:14px; }
+.stageHeading small { color:var(--dsw-alias-label-secondary); font-size:12px; line-height:1.45; }
+.choiceField { display:grid; align-items:start; gap:7px; color:var(--dsw-alias-label-secondary); font-size:13px; }
+.choiceField > :last-child { justify-self:start; max-width:100%; }
+.hint { margin:0; color:var(--dsw-alias-label-secondary); font-size:12px; line-height:1.55; }
+.hint code { color:var(--dsw-alias-label-primary); }
+.codeArea { width:100%; box-sizing:border-box; min-height:140px; padding:11px 12px; resize:vertical; border:0.5px solid var(--dsw-alias-border-l2); border-radius:8px; background:var(--dsw-alias-bg-layer-1); color:var(--dsw-alias-label-primary); font:12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.codeArea:focus-visible { outline:2px solid var(--dsw-alias-link); outline-offset:2px; }
+.ruleOptions { display:grid; gap:10px; }
+.ruleOption { display:grid; gap:12px; padding:14px; border:0.5px solid var(--dsw-alias-border-l2); border-radius:10px; background:var(--dsw-alias-bg-layer-1); }
+.optionTitle { display:flex; gap:10px; align-items:end; }
+.optionTitle .field { flex:1; min-width:0; }
+.optionLetter { display:grid; place-items:center; flex:none; width:28px; height:28px; border-radius:7px; background:var(--dsw-alias-bg-layer-3); color:var(--dsw-alias-label-primary); font-size:12px; font-weight:700; }
 .field { display:grid; gap:7px; color:var(--dsw-alias-label-secondary); font-size:13px; line-height:1.4; }
 .textarea { width:100%; box-sizing:border-box; min-height:96px; padding:10px 12px; resize:vertical; border:0.5px solid var(--dsw-alias-border-l2); border-radius:8px; background:var(--dsw-alias-bg-layer-1); color:var(--dsw-alias-label-primary); font:inherit; line-height:1.55; }
 .textarea:focus-visible { outline:2px solid var(--dsw-alias-link); outline-offset:2px; }
@@ -54,6 +73,8 @@
 .barFill { height:100%; border-radius:7px; background:var(--dsw-alias-link); }
 .resultFootnote { margin:0; color:var(--dsw-alias-label-secondary); font-size:12px; line-height:1.6; }
 @media (max-width:640px) {
+  .pageHeader { flex-direction:column; }
+  .headerActions { justify-content:flex-start; }
   .panel { padding:14px; }
   .ruleHeader { align-items:flex-start; flex-direction:column; }
   .ruleControls { width:100%; justify-content:space-between; }

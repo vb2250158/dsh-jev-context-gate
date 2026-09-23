@@ -1,10 +1,11 @@
 import { build } from 'esbuild'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 await mkdir(resolve(root, 'lib'), { recursive: true })
 await build({ entryPoints: [resolve(root, 'src/index.mjs')], outfile: resolve(root, 'lib/index.js'), bundle: true, format: 'esm', platform: 'node', target: 'node22', external: ['@deepseek-ai/*'], logLevel: 'silent' })
+await copyFile(resolve(root, 'src/question-worker.mjs'), resolve(root, 'lib/question-worker.mjs'))
 const temp = resolve(root, '.tmp-client')
 await rm(temp, { recursive: true, force: true })
 const result = await build({ entryPoints: [resolve(root, 'src/client/index.ts')], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', write: false, outdir: temp, loader: { '.css': 'local-css' }, external: ['react', 'react/jsx-runtime', '@deepseek-ai/*'], logLevel: 'silent' })
