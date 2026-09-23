@@ -6,7 +6,7 @@ An independent open-source DSH plugin that applies data-driven preflight rules b
 
 ## Status
 
-`0.1.2` disables automatic peer installation during Git package preparation so unpublished DSH peers are not fetched; `0.1.1` fixed an unsupported `schemastery` `enum` API call in the settings schema. The rule interpreter, structured generic-model judge, pre-step injection, DSH settings namespace, Jev settings page, model catalog picker, JSON rule editor and host-evidence correction pure function exist. A native Jev provider protocol, live settings-page model test and full DSH composition acceptance remain in progress. The post-stream boundary adds a bounded reminder only when host `tool-result` facts report failure, while preserving the original stream; it is not an absolute before-display veto.
+`0.1.3` allows the `esbuild` build script during Git package preparation; `0.1.2` disabled automatic peer installation so unpublished DSH peers are not fetched; `0.1.1` fixed an unsupported `schemastery` `enum` API call in the settings schema. The rule interpreter, structured generic-model judge, pre-step injection, DSH settings namespace, Jev settings page, model catalog picker, JSON rule editor and host-evidence correction pure function exist. A native Jev provider protocol, live settings-page model test and full DSH composition acceptance remain in progress. The post-stream boundary adds a bounded reminder only when host `tool-result` facts report failure, while preserving the original stream; it is not an absolute before-display veto.
 
 ## Design
 
