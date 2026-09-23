@@ -7,7 +7,7 @@ const settings = { provider: 'example', model: 'ordinary-model' };
 const createMessage = text => ({ content: [{ type: 'text', text }] });
 const chunks = text => async function* () {
   yield { type: 'text-delta', text };
-  yield { type: 'finish', reason: 'stop' };
+  yield { type: 'finish', reason: { kind: 'stop' } };
 }();
 const input = { settings, state: '退款请求', question: '应如何处理？', options: ['退款', '解释', '其他'], createMessage };
 

@@ -29,7 +29,7 @@ export async function testChoice({ settings, state, question, options, signal, s
     if (chunk.type === 'text-delta') output += chunk.text;
     if (output.length > 16000) throw new Error('模型输出超过长度限制。');
     if (chunk.type === 'finish') {
-      if (chunk.reason !== 'stop') throw new Error('模型未正常完成回答。');
+      if (chunk.reason?.kind !== 'stop') throw new Error(`模型未正常完成回答（${chunk.reason?.kind ?? '未知原因'}）。`);
       finished = true;
     }
   }

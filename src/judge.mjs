@@ -24,7 +24,7 @@ export async function judge({ settings, phase, text, signal, stream, createMessa
     if (chunk.type === 'text-delta') output += chunk.text;
     if (output.length > 16000) throw new Error('Judgement output exceeds budget');
     if (chunk.type === 'finish') {
-      if (chunk.reason !== 'stop') throw new Error('Judgement did not finish successfully');
+      if (chunk.reason?.kind !== 'stop') throw new Error('Judgement did not finish successfully');
       finished = true;
     }
   }

@@ -6,6 +6,8 @@ An independent open-source DSH plugin that applies data-driven preflight rules b
 
 ## Status
 
+`0.1.8` reads DSH's `finish.reason.kind` to recognize successful model completion, fixing a false failure in live tests.
+
 `0.1.7` adds an ordinary-model Choice test showing the question, options, option probabilities, and a distribution-concentration result. Model IDs automatically select Jev native or LLM JSON simulation; the manual mode switch is gone. `0.1.6` translated default rules into Chinese and replaced the JSON editor with rule cards. The rule interpreter, ordinary-model judge, pre-step injection, DSH settings namespace, model picker, rule form, and host-evidence correction pure function exist. Native Jev structured calls still require a provider adapter; ordinary-model testing uses a configured DSH model. The post-stream boundary adds a bounded reminder only when host `tool-result` facts report failure, while preserving the original stream; it is not an absolute before-display veto.
 
 ## Design
