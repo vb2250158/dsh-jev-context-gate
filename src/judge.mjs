@@ -1,9 +1,10 @@
 import { evaluatePolicy, validateRules } from './policy.mjs';
+import { modeForModel } from './mode.mjs';
 
 /** Generic model scores are self-reported, never calibrated native confidence. */
 export async function judge({ settings, phase, text, signal, stream, createMessage }) {
   if (!settings.provider || !settings.model) throw new Error('Jev judgement model is not configured');
-  if (settings.nativeJev) throw new Error('Native Jev protocol is not configured; select generic model mode');
+  if (modeForModel(settings.model) === 'jev-native') throw new Error('Native Jev model requires a structured provider adapter');
   const rules = validateRules(settings.rules).filter(rule => rule.enabled && rule.phase === phase);
   if (!['before', 'after'].includes(phase)) throw new Error('Invalid judgement phase');
   if (typeof text !== 'string' || text.length > 24000) throw new Error('Judgement input exceeds 24000 characters');

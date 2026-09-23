@@ -24,13 +24,13 @@ Check event timing against streaming visibility. A stop hook after displayed tex
 
 ## Models
 
-Use exact DSH provider/model routes without changing the main conversation model. Native Jev requires its documented structured protocol, not chat JSON mislabeled as native Jev. Generic-model self-reported probabilities are not calibrated confidence. Invalid responses, timeouts and configuration changes are explicit; no silent model fallback.
+Use exact DSH provider/model routes without changing the main conversation model. IDs beginning with `jev-` automatically select native mode; other IDs select LLM JSON simulation. The legacy `nativeJev` setting remains readable but does not select a mode. Native Jev requires a provider adapter for its documented structured protocol, not chat JSON mislabeled as native Jev. Ordinary-model option probabilities are estimates; the UI computes normalized-entropy distribution concentration and labels it simulated confidence, never calibrated confidence. Invalid responses, timeouts and configuration changes are explicit; no silent model fallback.
 
 ## Settings and testing
 
 Add a Jev settings entry with master switch, model picker, phase switches, editable rules, budgets and correction limits. Reuse the supported model catalog and picker extension; do not import private components.
 
-The Jev Test action accepts text, phase, optional candidate answer and synthetic evidence. Show raw output, normalized probabilities, matching rules, exact injection preview, latency and errors. Preview never injects into a real session or executes tools. Test text is not automatically included in source or shared settings.
+The first Jev Test surface accepts state text, one Choice question, and 2–16 options. Its Host route calls an ordinary model once under a constrained JSON protocol and shows option probabilities, the highest-probability option, simulated confidence, latency, and errors. Testing never injects into a real session or executes tools. Jev model IDs are labeled native and testing stays unavailable until a provider exposes structured calls. Test text is not automatically included in source or shared settings.
 
 ## Acceptance
 

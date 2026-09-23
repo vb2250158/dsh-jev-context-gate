@@ -2,6 +2,8 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { Config, DEFAULT_SETTINGS, SETTINGS_NAMESPACE, SettingsSchema } from './settings.mjs';
 import { judge } from './judge.mjs';
 import { evidenceCorrection } from './evidence.mjs';
+import { testChoice } from './choice-test.mjs';
+import { createTestHandler } from './test-route.mjs';
 export { Config, DEFAULT_SETTINGS, SETTINGS_NAMESPACE, SettingsSchema } from './settings.mjs';
 export { evaluatePolicy } from './policy.mjs';
 export const name = 'dsh-jev-context-gate';
@@ -12,6 +14,15 @@ export function apply(ctx, config = {}) {
   const scope = ctx.settings.register(SETTINGS_NAMESPACE, SettingsSchema, { base: { ...DEFAULT_SETTINGS, ...Config(config) } });
   const runJudge = (settings, phase, input, signal) => judge({ settings, phase, text: input, signal,
     stream: options => ctx.llm.stream(options), createMessage: contextMessage });
+  ctx.inject(['webServer'], web => {
+    web.effect(() => web.webServer.register({
+      kind: 'exact', path: '/api/dsh-jev-context-gate/test',
+      handler: createTestHandler((input, signal) => testChoice({
+        settings: scope.get(), ...input, signal,
+        stream: options => ctx.llm.stream(options), createMessage: contextMessage,
+      })),
+    }));
+  });
   const evidenceFacts = options => options.messages.flatMap(message => message.content.filter(block => block.type === 'tool-result').map(block => ({
     name: block.toolCallId, ok: block.isError !== true, summary: block.isError === true ? '工具结果标记为失败。' : '工具结果已记录。',
   })));

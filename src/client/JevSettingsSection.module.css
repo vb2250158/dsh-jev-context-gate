@@ -34,6 +34,25 @@
 .unsaved { color:var(--dsw-alias-label-primary); font-weight:600; }
 .empty { margin:0; padding:18px; text-align:center; color:var(--dsw-alias-label-secondary); }
 .error { margin:0; color:var(--dsw-alias-label-error); line-height:1.5; }
+.testModel { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 12px; border-radius:8px; background:var(--dsw-alias-bg-layer-1); font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+.modeBadge { flex:none; padding:4px 8px; border-radius:6px; background:var(--dsw-alias-bg-layer-3); color:var(--dsw-alias-label-secondary); font-size:12px; font-weight:600; }
+.optionEditor { display:grid; gap:8px; }
+.optionEditRow { display:flex; align-items:center; gap:8px; }
+.optionEditRow > :nth-child(2) { flex:1; min-width:0; }
+.optionIndex { width:24px; flex:none; text-align:center; font-weight:700; color:var(--dsw-alias-label-secondary); }
+.testActions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.testResult { display:grid; gap:16px; padding:16px; border:0.5px solid var(--dsw-alias-border-l2); border-radius:12px; background:var(--dsw-alias-bg-layer-1); }
+.resultHeading { display:flex; justify-content:space-between; gap:20px; flex-wrap:wrap; }
+.resultHeading > div { display:grid; gap:4px; }
+.resultHeading strong { font-size:20px; line-height:1.3; overflow-wrap:anywhere; }
+.resultEyebrow { color:var(--dsw-alias-label-secondary); font-size:12px; }
+.resultOptions { display:grid; gap:12px; }
+.resultOption { display:grid; gap:6px; }
+.resultOption > div:first-child { display:flex; justify-content:space-between; gap:12px; font-size:13px; }
+.resultOption strong { flex:none; }
+.barTrack { height:7px; overflow:hidden; border-radius:7px; background:var(--dsw-alias-bg-layer-2); }
+.barFill { height:100%; border-radius:7px; background:var(--dsw-alias-link); }
+.resultFootnote { margin:0; color:var(--dsw-alias-label-secondary); font-size:12px; line-height:1.6; }
 @media (max-width:640px) {
   .panel { padding:14px; }
   .ruleHeader { align-items:flex-start; flex-direction:column; }

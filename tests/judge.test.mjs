@@ -21,6 +21,6 @@ test('tool calls are rejected by the judgement boundary', async () => {
   await assert.rejects(() => judge({ settings, phase: 'before', text: 'x', stream: () => stream, createMessage }))
 })
 
-test('native Jev does not silently use generic JSON mode', async () => {
-  await assert.rejects(() => judge({ settings: { ...settings, nativeJev: true }, phase: 'before', text: 'x', stream: () => chunks('{}'), createMessage }), /Native Jev/)
+test('Jev model IDs select native mode without the legacy switch', async () => {
+  await assert.rejects(() => judge({ settings: { ...settings, model: 'jev-latest', nativeJev: false }, phase: 'before', text: 'x', stream: () => chunks('{}'), createMessage }), /Native Jev/)
 })
