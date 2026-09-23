@@ -2,7 +2,7 @@
 
 English | [简体中文](DESIGN.md)
 
-Status: work in progress; not installed or end-to-end verified.
+Status: work in progress; installation and end-to-end acceptance depend on runtime evidence from the target environment.
 
 ## Ownership
 

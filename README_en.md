@@ -6,7 +6,7 @@ An independent open-source DSH plugin that applies data-driven preflight rules b
 
 ## Status
 
-`0.1.0` is the first development baseline. The rule interpreter, structured generic-model judge, pre-step injection, DSH settings namespace, Jev settings page, model catalog picker, JSON rule editor and host-evidence correction pure function exist. A native Jev provider protocol, live settings-page model test and full DSH composition acceptance remain in progress. The post-stream boundary now adds a bounded reminder only when host `tool-result` facts report failure, while preserving the original stream; it is not an absolute before-display veto.
+`0.1.1` fixes an unsupported `schemastery` `enum` API call in the settings schema that prevented plugin loading. The rule interpreter, structured generic-model judge, pre-step injection, DSH settings namespace, Jev settings page, model catalog picker, JSON rule editor and host-evidence correction pure function exist. A native Jev provider protocol, live settings-page model test and full DSH composition acceptance remain in progress. The post-stream boundary adds a bounded reminder only when host `tool-result` facts report failure, while preserving the original stream; it is not an absolute before-display veto.
 
 ## Design
 
@@ -17,7 +17,7 @@ An independent open-source DSH plugin that applies data-driven preflight rules b
 
 ## Settings and test
 
-The Jev page controls before/after stages, context budget and correction limit. The Jev test accepts text and phase and shows a rule preview; by default it never injects into a real session or executes tools. Provider/model selection remains separate from the main session model and will be connected to the DSH model directory in the next implementation step.
+The Jev page controls the gate and preflight, selects a separate judge model, and edits JSON rules. Its rule preview lists enabled rules for a phase without calling a model, scoring matches or injecting into a real session. The native Jev protocol is unavailable; the current judge requires generic-model JSON mode.
 
 ## Development
 
