@@ -4,6 +4,7 @@ import type { ModelCatalog } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import styles from './JevSettingsSection.module.css'
 import { modeForModel } from '../mode.mjs'
+import { validateRules } from '../policy.mjs'
 import { JevTestPage } from './JevTestPage.tsx'
 import { JevRuleEditor } from './JevRuleEditor.tsx'
 import type { DraftRule, Rule } from './JevRuleEditor.tsx'
@@ -13,7 +14,7 @@ type Injected = { scope: SettingsScope<Settings>; loadCatalog: () => Promise<Mod
 export type JevSettingsSectionProps = Partial<Injected> & { close?: () => void }
 
 const toDraft = (rules: Rule[]): DraftRule[] =>
-  rules.map(({ threshold, ...rule }) => ({ ...rule, thresholdPercent: String(Math.round(threshold * 100)) }))
+  validateRules(rules).map(({ threshold, ...rule }) => ({ ...rule, thresholdPercent: String(Math.round(threshold * 100)) }))
 
 function validateDraft(rules: DraftRule[]): Rule[] {
   if (rules.length > 64) throw new Error('最多只能保存 64 条规则。')
