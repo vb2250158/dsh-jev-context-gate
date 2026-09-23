@@ -53,10 +53,12 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
   const [testResult, setTestResult] = React.useState<ChoiceResult>()
   const [testError, setTestError] = React.useState<string>()
   const [testing, setTesting] = React.useState(false)
+  const testResultRef = React.useRef<HTMLDivElement>(null)
   const testGeneration = React.useRef(0)
   const savingRef = React.useRef(false)
   const request = React.useRef(0)
   React.useEffect(() => () => { request.current += 1 }, [])
+  React.useEffect(() => { if (testResult) testResultRef.current?.scrollIntoView({ block: 'start' }) }, [testResult])
   const writable = snapshot.writable && snapshot.status === 'ready' && current !== undefined && !saving
   const savedRules = current ? JSON.stringify(current.rules) : null
   const dirty = draftRules !== null && sourceRules !== null && JSON.stringify(draftRules) !== JSON.stringify(toDraft(JSON.parse(sourceRules) as Rule[]))
@@ -180,9 +182,9 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
         <div className={styles.field}><span>选项</span><div className={styles.optionEditor}>{testOptions.map((option, index) =>
           <div className={styles.optionEditRow} key={index}><span className={styles.optionIndex}>{String.fromCharCode(65 + index)}</span><Input aria-label={`选项 ${index + 1}`} value={option} maxLength={800} onChange={event => { const value = event.currentTarget.value; setTestOptions(values => values.map((item, i) => i === index ? value : item)); clearTest() }} /><Button variant="ghost" size="sm" disabled={testOptions.length <= 2} onClick={() => { setTestOptions(values => values.filter((_, i) => i !== index)); clearTest() }}>移除</Button></div>
         )}</div><Button variant="outline" size="sm" disabled={testOptions.length >= 16} onClick={() => { setTestOptions(values => [...values, '']); clearTest() }}>添加选项</Button></div>
-        <div className={styles.testActions}><Button variant="primary" size="sm" disabled={testing || modelMode === 'jev-native' || !current.provider || !current.model || !testState.trim() || !testQuestion.trim() || testOptions.some(option => !option.trim())} onClick={runTest}>{testing ? '正在测试…' : '运行测试'}</Button><span className={styles.note}>{modelMode === 'jev-native' ? 'Jev 型号需提供商支持原生结构化接口；接入后可进行原生测试。' : '普通模型的概率是模拟估计，未经校准。'}</span></div>
+        <div className={styles.testActions}><Button variant="primary" size="sm" disabled={testing || modelMode === 'jev-native' || !current.provider || !current.model || !testState.trim() || !testQuestion.trim() || testOptions.some(option => !option.trim())} onClick={runTest}>{testing ? '正在测试…' : '运行测试'}</Button><span className={styles.note}>{modelMode === 'jev-native' ? '已识别 Jev 原生模式。当前测试尚需 DSH 模型提供商接入原生结构化调用。' : '普通模型的概率是模拟估计，未经校准。'}</span></div>
         {testError && <p className={styles.error} role="alert">测试失败：{testError}</p>}
-        {testResult && <div className={styles.testResult} aria-label="测试结果">
+        {testResult && <div ref={testResultRef} className={styles.testResult} aria-label="测试结果">
           <div className={styles.resultHeading}><div><span className={styles.resultEyebrow}>模型选择</span><strong>{testResult.options.find(option => option.id === testResult.selected)?.label ?? '无结果'}</strong></div><div><span className={styles.resultEyebrow}>模拟置信度</span><strong>{percent(testResult.confidence)}</strong></div></div>
           <p className={styles.note}>题目：{testResult.question}</p>
           <div className={styles.resultOptions}>{testResult.options.map(option => <div className={styles.resultOption} key={option.id}><div><span>{option.label}</span><strong>{percent(option.probability)}</strong></div><div className={styles.barTrack}><div className={styles.barFill} style={{ width: percent(option.probability) }} /></div></div>)}</div>
@@ -193,7 +195,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
         <div className={styles.sectionHeading}><h3>会话门禁</h3><p>选中的判定模型也可用于门禁，不会改变主会话模型。</p></div>
         <div className={styles.row}><span>启用门禁</span><Switch checked={current.enabled} disabled={!writable} label="启用门禁" onChange={enabled => patch({ enabled })} /></div>
         <div className={styles.row}><span>判定用户消息</span><Switch checked={current.beforeEnabled} disabled={!writable} label="判定用户消息" onChange={beforeEnabled => patch({ beforeEnabled })} /></div>
-        <p className={styles.note}>判定方式根据模型型号自动识别。普通模型使用 LLM JSON 模拟；Jev 型号使用原生模式。</p>
+        <p className={styles.note}>按模型型号自动标记：普通模型为 LLM JSON 模拟，Jev 型号为原生模式。原生判定需提供商适配。</p>
       </div>
 
       <div className={styles.panel}>
