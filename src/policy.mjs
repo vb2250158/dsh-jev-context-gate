@@ -8,6 +8,8 @@ export function validateRules(rules) {
     if (!rule || typeof rule.id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(rule.id) || ids.has(rule.id)) throw new TypeError('Invalid or duplicate rule id');
     ids.add(rule.id);
     if (!['before', 'after'].includes(rule.phase) || typeof rule.enabled !== 'boolean') throw new TypeError('Invalid rule event');
+    const title = rule.title ?? '';
+    if (typeof title !== 'string' || title.length > 120) throw new TypeError('Invalid rule title');
     const description = rule.description ?? '';
     if (typeof description !== 'string' || description.length > 500) throw new TypeError('Invalid rule description');
     const input = rule.input || (rule.phase === 'before' ? 'latest-user-message' : 'tool-results');
@@ -36,7 +38,7 @@ export function validateRules(rules) {
       if (!action || !validTypes.includes(action.type) || typeof action.text !== 'string' || action.text.length > 8000 || (action.type !== 'none' && !action.text.trim())) throw new TypeError('Invalid option action');
       return { id: option.id, label: option.label, action: { type: action.type, text: action.type === 'none' ? '' : action.text } };
     });
-    return { id: rule.id, enabled: rule.enabled, description, phase: rule.phase, input, customInput, questionSource, questionScript, question, options: validOptions, threshold: rule.threshold };
+    return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, input, customInput, questionSource, questionScript, question, options: validOptions, threshold: rule.threshold };
   });
 }
 

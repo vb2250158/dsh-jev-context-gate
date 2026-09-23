@@ -4,7 +4,7 @@ English | [简体中文](DESIGN.md)
 
 ## Data and execution
 
-DSH settings owns saved rules. A rule stores a stable ID, enabled state, editable description, event, input source, optional fixed input, question source, title or script, probability threshold, and 2–16 options with stable IDs, labels, and actions. Existing `phase/question/context/threshold` rules migrate when settings are read. Legacy `beforeEnabled/afterEnabled` fields remain readable; enabled rules control runtime.
+DSH settings owns saved rules. A rule stores a stable ID, enabled state, editable rule title and description, event, input source, optional fixed input, question source, question title or script, probability threshold, and 2–16 options with stable IDs, labels, and actions. Existing `phase/question/context/threshold` rules migrate when settings are read. Legacy `beforeEnabled/afterEnabled` fields remain readable; enabled rules control runtime.
 
 The `before` event reads the latest user text or text visible at `agent/pre-step` and appends the selected option's context before the main model request. The `after` event reads host tool-result IDs, failure status, and text at `llm/stream`; it buffers the original stream and appends the selected reminder before `finish`. It cannot retract content already displayed. Fixed custom input is used verbatim when its event occurs.
 
@@ -14,7 +14,7 @@ An ordinary model returns JSON probabilities for every option of every active ru
 
 ## UI and testing
 
-Rule settings contain one master switch, a judge-model picker, and compact four-stage rule editing. The collapsed card shows its description, while detailed help expands on demand. Dynamic sources describe the exact runtime content; script mode states that the title and labels are generated at runtime. Actions and parameters belong to options. A separate test view within the settings section runs a disposable Choice request without changing a session. Ordinary models show option probabilities and distribution concentration, not calibrated confidence.
+Rule settings contain one master switch, a judge-model picker, and compact four-stage rule editing. The collapsed card shows the separately saved rule title and description, falling back to the rule number for older titles. One rule opens at a time, detailed help and option action text expand on demand, and save controls remain above the list. Dynamic sources describe the exact runtime content; script mode states that the title and labels are generated at runtime. Actions and parameters belong to options. A separate test view within the settings section runs a disposable Choice request without changing a session. Ordinary models show option probabilities and distribution concentration, not calibrated confidence.
 
 ## Acceptance
 

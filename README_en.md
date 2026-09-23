@@ -4,6 +4,10 @@ English | [简体中文](README.md)
 
 Jev rules for DSH. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Model IDs starting with `jev-` are labeled native; structured native calls still require a provider adapter.
 
+## 0.1.13
+
+Rule title, rule description, and question title are saved separately. Collapsed cards show the rule title and description. Editing opens one rule at a time, option action text expands on demand, and save controls stay above the list. Existing rules without titles show their rule number until edited.
+
 ## 0.1.11
 
 The browser migrates legacy rules before rendering the rule editor, avoiding a transient first-load crash.

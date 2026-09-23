@@ -20,6 +20,7 @@ function validateDraft(rules: DraftRule[]): Rule[] {
   if (rules.length > 64) throw new Error('最多只能保存 64 条规则。')
   return rules.map((rule, index) => {
     const number = index + 1
+    if (rule.title.length > 120) throw new Error(`第 ${number} 条规则的标题不能超过 120 字。`)
     if (rule.description.length > 500) throw new Error(`第 ${number} 条规则的说明不能超过 500 字。`)
     if (rule.questionSource === 'configured' && !rule.question.trim()) throw new Error(`第 ${number} 条规则缺少题目标题。`)
     if (rule.questionSource === 'script' && !rule.questionScript.trim()) throw new Error(`第 ${number} 条规则缺少题目生成脚本。`)
@@ -64,7 +65,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
     if (!current || (draftRules !== null && dirty)) return
     setDraftRules(toDraft(current.rules))
     setSourceRules(JSON.stringify(current.rules))
-    if (draftRules === null) setExpandedIds(new Set(current.rules.slice(0, 1).map(rule => rule.id)))
+    if (draftRules === null) setExpandedIds(new Set())
   }, [savedRules])
 
   const updateRule = (id: string, changes: Partial<DraftRule>): void => {
@@ -154,25 +155,25 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
 
       <div className={styles.panel}>
         <div className={styles.sectionHeading}><h3>规则</h3></div>
-        <div className={styles.ruleList}>{(draftRules ?? toDraft(current.rules)).map((rule, index) =>
-          <JevRuleEditor key={rule.id} rule={rule} index={index} expanded={expandedIds.has(rule.id)} writable={writable}
-            update={next => updateRule(rule.id, next)}
-            remove={() => setDraftRules(rules => rules?.filter(item => item.id !== rule.id) ?? null)}
-            toggle={() => setExpandedIds(ids => { const next = new Set(ids); if (next.has(rule.id)) next.delete(rule.id); else next.add(rule.id); return next })} />
-        )}</div>
-        {draftRules?.length === 0 && <p className={styles.empty}>还没有规则。添加一条规则，选择事件并配置题目、选项与行为。</p>}
         <div className={styles.ruleActions}>
           <Button variant="outline" size="sm" disabled={!writable || (draftRules?.length ?? 0) >= 64} onClick={() => {
             const id = `rule-${crypto.randomUUID().replaceAll('-', '')}`
-            setDraftRules(rules => [...(rules ?? []), { id, enabled: true, description: '', phase: 'before', input: 'latest-user-message', customInput: '',
+            setDraftRules(rules => [...(rules ?? []), { id, enabled: true, title: '', description: '', phase: 'before', input: 'latest-user-message', customInput: '',
               questionSource: 'configured', questionScript: '', question: '', thresholdPercent: '80',
               options: [{ id: 'yes', label: '是', action: { type: 'inject-context', text: '' } }, { id: 'no', label: '否', action: { type: 'none', text: '' } }] }])
-            setExpandedIds(ids => new Set([...ids, id]))
+            setExpandedIds(new Set([id]))
           }}>添加规则</Button>
           <span className={dirty ? styles.unsaved : styles.saved}>{dirty ? '有未保存的修改' : '规则已保存'}</span>
           <Button variant="ghost" size="sm" disabled={!writable || !dirty} onClick={discardRules}>放弃修改</Button>
           <Button variant="primary" size="sm" disabled={!writable || !dirty || changedElsewhere} onClick={saveRules}>保存规则</Button>
         </div>
+        <div className={styles.ruleList}>{(draftRules ?? toDraft(current.rules)).map((rule, index) =>
+          <JevRuleEditor key={rule.id} rule={rule} index={index} expanded={expandedIds.has(rule.id)} writable={writable}
+            update={next => updateRule(rule.id, next)}
+            remove={() => setDraftRules(rules => rules?.filter(item => item.id !== rule.id) ?? null)}
+            toggle={() => setExpandedIds(ids => ids.has(rule.id) ? new Set() : new Set([rule.id]))} />
+        )}</div>
+        {draftRules?.length === 0 && <p className={styles.empty}>还没有规则。添加一条规则，选择事件并配置题目、选项与行为。</p>}
         {changedElsewhere && <p className={styles.error} role="alert">规则已在别处更新。请放弃本地修改并查看最新内容。</p>}
         {rulesError && <p className={styles.error} role="alert">{rulesError}</p>}
       </div>

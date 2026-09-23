@@ -2,33 +2,36 @@
 .pageHeader { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
 .headerActions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
 .pageHeader h2 { margin:0 0 6px; font-size:20px; line-height:1.35; }
-.intro, .note { margin:0; color:var(--dsw-alias-label-secondary); line-height:1.6; }
+.note { margin:0; color:var(--dsw-alias-label-secondary); line-height:1.6; }
 .statusOn, .statusOff { flex:none; padding:5px 10px; border-radius:8px; font-size:12px; font-weight:600; line-height:1.4; }
 .statusOn { color:var(--dsw-alias-label-primary); background:var(--dsw-alias-bg-layer-3); }
 .statusOff { color:var(--dsw-alias-label-secondary); background:var(--dsw-alias-bg-layer-2); }
 .panel { display:grid; gap:10px; padding:14px; border:0.5px solid var(--dsw-alias-border-l2); border-radius:12px; background:var(--dsw-alias-bg-layer-2); }
 .sectionHeading { display:grid; gap:4px; }
 .sectionHeading h3 { margin:0; font-size:16px; line-height:1.4; }
-.sectionHeading p { margin:0; color:var(--dsw-alias-label-secondary); line-height:1.55; }
 .row, .modelField { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:9px 0; border-bottom:0.5px solid var(--dsw-alias-border-l2); }
 .modelField { border-bottom:0; }
 .ruleList { display:grid; gap:10px; }
 .ruleCard { overflow:hidden; border:0.5px solid var(--dsw-alias-border-l2); border-radius:12px; background:var(--dsw-alias-bg-layer-1); }
-.ruleHeader { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 12px; }
-.ruleSummary { min-width:0; display:grid; gap:4px; }
-.ruleSummary strong { font-size:14px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
-.ruleSummarySub { font-size:12px; color:var(--dsw-alias-label-secondary); }
+.ruleHeader { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:12px; }
+.ruleSummary { min-width:0; display:grid; gap:3px; }
+.ruleSummary strong { font-size:15px; font-weight:650; line-height:1.4; overflow-wrap:anywhere; }
+.ruleDescription, .ruleSummarySub { color:var(--dsw-alias-label-secondary); font-size:12px; line-height:1.4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ruleMeta { display:flex; flex-wrap:wrap; align-items:center; gap:7px; font-size:12px; line-height:1.4; }
 .ruleNumber { font-weight:700; }
 .phaseBefore, .phaseAfter, .threshold { padding:3px 7px; border-radius:6px; color:var(--dsw-alias-label-secondary); background:var(--dsw-alias-bg-layer-2); }
 .phaseAfter { opacity:.75; }
-.ruleControls { display:flex; align-items:center; gap:9px; flex:none; }
-.ruleBody { display:grid; gap:9px; padding:12px; border-top:0.5px solid var(--dsw-alias-border-l2); }
+.ruleControls { display:flex; align-items:center; gap:9px; flex:none; padding-top:12px; }
+.ruleBody { display:grid; gap:10px; padding:12px; border-top:0.5px solid var(--dsw-alias-border-l2); }
 .ruleStage { display:grid; gap:8px; padding:9px 0 0; border-top:0.5px solid var(--dsw-alias-border-l2); }
-.stageHeading { display:flex; align-items:center; }
+.stageHeading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .stageHeading strong { color:var(--dsw-alias-label-primary); font-size:13px; }
-.choiceField { display:grid; grid-template-columns:minmax(100px, 1fr) minmax(0, 2fr); align-items:center; gap:10px; color:var(--dsw-alias-label-secondary); font-size:13px; }
-.choiceField > :last-child { justify-self:start; max-width:100%; }
+.stageHeading span { color:var(--dsw-alias-label-secondary); font-size:12px; }
+.contextFields, .questionControls { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; align-items:end; }
+.questionControls { grid-template-columns:minmax(0, 1fr) minmax(0, 180px); }
+.choiceField { display:grid; min-width:0; gap:5px; color:var(--dsw-alias-label-secondary); font-size:13px; line-height:1.4; }
+.choiceButton { display:flex; justify-content:space-between; gap:8px; width:100%; min-width:0; text-align:left; }
+.choiceValue { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .helpDetails { color:var(--dsw-alias-label-secondary); font-size:12px; line-height:1.5; }
 .helpDetails summary { width:max-content; max-width:100%; cursor:pointer; }
 .helpDetails p { margin:6px 0 0; }
@@ -36,16 +39,17 @@
 .codeArea { width:100%; box-sizing:border-box; min-height:140px; padding:11px 12px; resize:vertical; border:0.5px solid var(--dsw-alias-border-l2); border-radius:8px; background:var(--dsw-alias-bg-layer-1); color:var(--dsw-alias-label-primary); font:12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .codeArea:focus-visible { outline:2px solid var(--dsw-alias-link); outline-offset:2px; }
 .ruleOptions { display:grid; gap:8px; }
-.ruleOption { display:grid; gap:8px; padding:10px; border:0.5px solid var(--dsw-alias-border-l2); border-radius:8px; background:var(--dsw-alias-bg-layer-1); }
+.ruleOption { display:grid; gap:8px; padding:10px; border:0.5px solid var(--dsw-alias-border-l2); border-radius:8px; background:var(--dsw-alias-bg-layer-2); }
 .optionTitle { display:flex; gap:10px; align-items:end; }
 .optionTitle .field { flex:1; min-width:0; }
+.optionActionControls { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:10px; align-items:end; }
+.actionPreview { margin:0; color:var(--dsw-alias-label-secondary); font-size:12px; line-height:1.45; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow-wrap:anywhere; }
 .optionLetter { display:grid; place-items:center; flex:none; width:28px; height:28px; border-radius:7px; background:var(--dsw-alias-bg-layer-3); color:var(--dsw-alias-label-primary); font-size:12px; font-weight:700; }
 .field { display:grid; gap:5px; color:var(--dsw-alias-label-secondary); font-size:13px; line-height:1.4; }
-.thresholdField { max-width:220px; }
 .textarea { width:100%; box-sizing:border-box; min-height:96px; padding:10px 12px; resize:vertical; border:0.5px solid var(--dsw-alias-border-l2); border-radius:8px; background:var(--dsw-alias-bg-layer-1); color:var(--dsw-alias-label-primary); font:inherit; line-height:1.55; }
 .textarea:focus-visible { outline:2px solid var(--dsw-alias-link); outline-offset:2px; }
 .ruleFooter { display:flex; justify-content:flex-end; border-top:0.5px solid var(--dsw-alias-border-l2); padding-top:8px; }
-.ruleActions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.ruleActions { position:sticky; top:0; z-index:1; display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:8px 0; border-bottom:0.5px solid var(--dsw-alias-border-l2); background:var(--dsw-alias-bg-layer-2); }
 .saved, .unsaved { margin-inline-end:auto; color:var(--dsw-alias-label-secondary); font-size:12px; }
 .unsaved { color:var(--dsw-alias-label-primary); font-weight:600; }
 .empty { margin:0; padding:18px; text-align:center; color:var(--dsw-alias-label-secondary); }
@@ -76,5 +80,6 @@
   .ruleHeader { align-items:flex-start; flex-direction:column; }
   .ruleControls { width:100%; justify-content:space-between; }
   .modelField { align-items:flex-start; flex-direction:column; }
-  .choiceField { grid-template-columns:1fr; gap:5px; }
+  .ruleControls { padding-top:0; }
+  .contextFields, .questionControls, .optionActionControls { grid-template-columns:minmax(0, 1fr); }
 }
