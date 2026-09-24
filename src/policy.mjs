@@ -1,3 +1,5 @@
+import { optionParametersForEvent } from './event-parameters.mjs';
+
 const fixedToolQuestion = '本轮工具结果是否包含失败？';
 
 /** Convert saved legacy rules into option-owned actions and validate every executable field. */
@@ -13,13 +15,16 @@ export function validateRules(rules) {
     const description = rule.description ?? '';
     if (typeof description !== 'string' || description.length > 500) throw new TypeError('Invalid rule description');
     const input = rule.input || (rule.phase === 'after' ? 'tool-results' : rule.phase === 'skill-injection' ? 'skill-summary' : 'latest-user-message');
-    const candidateSource = rule.phase === 'skill-catalog' ? 'skill-catalog' : rule.candidateSource ?? 'none';
+    const candidateSource = rule.phase === 'skill-catalog' ? 'event-params'
+      : rule.candidateSource === 'input-lines' ? 'input-split' : rule.candidateSource ?? 'none';
     const candidateText = rule.candidateText ?? '';
     const candidateScript = rule.candidateScript ?? '';
-    if (!(rule.phase === 'skill-catalog' ? candidateSource === 'skill-catalog' : rule.phase === 'before' ? ['none', 'custom-list', 'script'].includes(candidateSource) : candidateSource === 'none')
+    const candidateParameterKey = rule.candidateParameterKey || (rule.phase === 'skill-catalog' ? 'skills' : '');
+    if (!(rule.phase === 'skill-catalog' ? candidateSource === 'event-params' : rule.phase === 'before' ? ['none', 'custom-list', 'input-split', 'script'].includes(candidateSource) : candidateSource === 'none')
       || typeof candidateText !== 'string' || candidateText.length > 64000 || typeof candidateScript !== 'string' || candidateScript.length > 16000
       || (candidateSource === 'custom-list' && candidateText.split(/\r?\n/).filter(item => item.trim()).length < 2)
-      || (candidateSource === 'script' && !candidateScript.trim())) throw new TypeError('Invalid candidate source');
+      || (candidateSource === 'script' && !candidateScript.trim())
+      || (candidateSource === 'event-params' && !optionParametersForEvent(rule.phase).some(parameter => parameter.key === candidateParameterKey))) throw new TypeError('Invalid candidate source');
     if (rule.phase === 'before' ? !['latest-user-message', 'current-context-text', 'user-message-with-skills', 'custom-text'].includes(input)
       : rule.phase === 'after' ? !['tool-results', 'custom-text'].includes(input)
         : rule.phase === 'skill-injection' ? !['skill-summary', 'skill-content', 'latest-user-message', 'current-context-text', 'custom-text'].includes(input)
@@ -29,17 +34,36 @@ export function validateRules(rules) {
     const questionSource = rule.questionSource || 'configured';
     const questionScript = rule.questionScript ?? '';
     if (!['configured', 'script'].includes(questionSource) || typeof questionScript !== 'string' || questionScript.length > 16000 || (questionSource === 'script' && !questionScript.trim())) throw new TypeError('Invalid question source');
-    const legacy = !Array.isArray(rule.options) || rule.options.length === 0;
+    const legacy = candidateSource === 'none' && (!Array.isArray(rule.options) || rule.options.length === 0);
     const question = rule.phase === 'after' && legacy ? fixedToolQuestion : rule.question;
     if (typeof question !== 'string' || (questionSource === 'configured' && !question.trim()) || question.length > 8000) throw new TypeError('Invalid question');
     if (!Number.isFinite(rule.threshold) || rule.threshold < 0 || rule.threshold > 1) throw new TypeError('Invalid threshold');
+    const splitMode = rule.splitMode ?? 'newline';
+    const splitText = rule.splitText ?? '';
+    if (!['newline', 'space', 'literal'].includes(splitMode) || typeof splitText !== 'string' || splitText.length > 100
+      || (candidateSource === 'input-split' && splitMode === 'literal' && !splitText)) throw new TypeError('Invalid option separator');
+    const selectionMode = rule.selectionMode || 'top';
+    const selectionValue = rule.selectionValue || (candidateSource === 'none' ? '10' : rule.options?.[0]?.action?.text) || '10';
+    const selectionAction = rule.selectionAction || 'prune';
+    const selectionActionText = rule.selectionActionText ?? '';
+    if (!['top', 'bottom', 'score-above', 'score-below'].includes(selectionMode) || typeof selectionValue !== 'string'
+      || !(selectionMode === 'top' || selectionMode === 'bottom' ? /^[1-9][0-9]*$/.test(selectionValue) && Number.isSafeInteger(Number(selectionValue))
+        : /^(?:100(?:\.0+)?|(?:[0-9]|[1-9][0-9])(?:\.[0-9]+)?)$/.test(selectionValue))
+      || !['prune', 'inject-extra'].includes(selectionAction) || typeof selectionActionText !== 'string' || selectionActionText.length > 8000
+      || (candidateSource !== 'none' && selectionAction === 'inject-extra' && !selectionActionText.trim())) throw new TypeError('Invalid selection settings');
+    if (candidateSource !== 'none') {
+      if (Array.isArray(rule.options) && rule.options.length > 0 && (rule.options.length !== 2
+        || rule.options[0]?.action?.type !== (candidateSource === 'event-params' ? 'keep-top-skills' : 'inject-selected-candidates')
+        || rule.options[1]?.action?.type !== 'none')) throw new TypeError('Invalid legacy selection options');
+      return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, input, customInput,
+        candidateSource, candidateText, candidateScript, candidateParameterKey, splitMode, splitText, selectionMode, selectionValue, selectionAction, selectionActionText,
+        questionSource, questionScript, question, options: [], threshold: rule.threshold };
+    }
     const options = Array.isArray(rule.options) && rule.options.length ? rule.options :
       rule.phase === 'before'
         ? [{ id: 'yes', label: '是', action: { type: 'inject-context', text: rule.context } }, { id: 'no', label: '否', action: { type: 'none', text: '' } }]
         : [{ id: 'failed', label: '有失败', action: { type: 'append-reminder', text: rule.context } }, { id: 'success', label: '全部成功', action: { type: 'none', text: '' } }];
     if (options.length < 2 || options.length > 16) throw new TypeError('Invalid options');
-    if (candidateSource !== 'none' && (options.length !== 2 || options[0].action?.type !== (candidateSource === 'skill-catalog' ? 'keep-top-skills' : 'inject-selected-candidates') || options[1].action?.type !== 'none'
-      || !/^[1-9][0-9]*$/.test(options[0].action.text) || Number(options[0].action.text) > 50)) throw new TypeError('Invalid Skill catalog action');
     const optionIds = new Set(), labels = new Set();
     const validOptions = options.map(option => {
       if (!option || typeof option.id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(option.id) || optionIds.has(option.id)
@@ -52,7 +76,9 @@ export function validateRules(rules) {
       return { id: option.id, label: option.label, action: { type: action.type, text: ['none', 'skip-skill'].includes(action.type) ? '' : action.text } };
     });
     if (input === 'user-message-with-skills' && !validOptions.some(option => option.action.type === 'inject-skill')) throw new TypeError('Skill-aware input requires a skill action');
-    return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, input, customInput, candidateSource, candidateText, candidateScript, questionSource, questionScript, question, options: validOptions, threshold: rule.threshold };
+    return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, input, customInput, candidateSource, candidateText, candidateScript, candidateParameterKey,
+      splitMode, splitText, selectionMode, selectionValue, selectionAction, selectionActionText,
+      questionSource, questionScript, question, options: validOptions, threshold: rule.threshold };
   });
 }
 

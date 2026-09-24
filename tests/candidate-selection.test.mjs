@@ -24,7 +24,7 @@ test('100 configured notices are ranked in one model request and the saved limit
   for (const limit of [10, 5]) {
     const prompts = [];
     const selected = await rankCatalog({ settings: { provider: 'test', model: 'ordinary' },
-      rule: { ...rule, options: [{ ...rule.options[0], action: { ...rule.options[0].action, text: String(limit) } }, rule.options[1]] },
+      rule: { ...rule, selectionValue: String(limit) },
       entries, input: '当前内容', signal, createMessage,
       stream: async function* (options) {
         prompts.push(JSON.parse(options.messages[0].content[0].text));
@@ -33,7 +33,8 @@ test('100 configured notices are ranked in one model request and the saved limit
       },
     });
     assert.equal(prompts.length, 1);
-    assert.equal(prompts[0].candidates.length, 100);
+    assert.equal(prompts[0].options.length, 100);
+    assert.equal(prompts[0].options[0].content, '注意事项 1');
     assert.equal(selected.length, limit);
     assert.equal(selected[0].description, '注意事项 100');
   }
@@ -46,28 +47,72 @@ test('trusted candidate script can generate items and invalid lists fail before 
   assert.throws(() => validateRules([{ ...manualRule, options: [{ ...manualRule.options[0], action: { type: 'none', text: '' } }, manualRule.options[1]] }]));
 });
 
-test('large candidate lists stay within the configured batch size and threshold applies below the top count', async () => {
+test('more than 100 candidates are all scored in one request and threshold still applies', async () => {
   const entries = Array.from({ length: 220 }, (_, index) => ({ name: `item-${index + 1}`, description: `注意事项 ${index + 1}` }));
   const sizes = [];
   const selected = await rankCatalog({ settings: { provider: 'test', model: 'ordinary' },
-    rule: { ...manualRule, threshold: 0.8, options: [{ ...manualRule.options[0], action: { type: 'inject-selected-candidates', text: '5' } }, manualRule.options[1]] },
+    rule: { ...manualRule, threshold: 0.8, selectionValue: '5' },
     entries, input: '当前内容', signal, createMessage,
     stream: async function* (options) {
-      const candidates = JSON.parse(options.messages[0].content[0].text).candidates;
+      const candidates = JSON.parse(options.messages[0].content[0].text).options;
       sizes.push(candidates.length);
       yield { type: 'text-delta', text: JSON.stringify({ scores: Object.fromEntries(candidates.map(row => [row.id, Number(row.id.slice(5)) / 220])) }) };
       yield { type: 'finish', reason: { kind: 'stop' } };
     },
   });
-  assert.ok(sizes.length > 1 && sizes.every(size => size <= 100));
+  assert.deepEqual(sizes, [220]);
   assert.deepEqual(selected.map(row => row.name), ['item-220', 'item-219', 'item-218', 'item-217', 'item-216']);
   const short = await rankCatalog({ settings: { provider: 'test', model: 'ordinary' },
     rule: { ...manualRule, threshold: 0.8 }, entries: entries.slice(0, 3), input: '当前内容', signal, createMessage,
     stream: async function* (options) {
-      const candidates = JSON.parse(options.messages[0].content[0].text).candidates;
+      const candidates = JSON.parse(options.messages[0].content[0].text).options;
       yield { type: 'text-delta', text: JSON.stringify({ scores: Object.fromEntries(candidates.map(row => [row.id, 0.2])) }) };
       yield { type: 'finish', reason: { kind: 'stop' } };
     },
   });
   assert.deepEqual(short, []);
+});
+
+test('selected input can supply one option per line without a candidate count cap', async () => {
+  const input = Array.from({ length: 550 }, (_, index) => `注意事项 ${index + 1}`).join('\n');
+  const rule = validateRules([{ ...manualRule, candidateSource: 'input-split', candidateText: '' }])[0];
+  const entries = await resolveCandidates(rule, input, signal);
+  assert.equal(entries.length, 550);
+  const prompts = [];
+  const selected = await rankCatalog({ settings: { provider: 'test', model: 'ordinary' }, rule,
+    entries, input, signal, createMessage,
+    stream: async function* (options) {
+      const prompt = JSON.parse(options.messages[0].content[0].text);
+      prompts.push(prompt);
+      yield { type: 'text-delta', text: JSON.stringify({ scores: Object.fromEntries(prompt.options.map((item, index) => [item.id, index / 550])) }) };
+      yield { type: 'finish', reason: { kind: 'stop' } };
+    },
+  });
+  assert.equal(prompts.length, 1);
+  assert.equal(prompts[0].options.length, 550);
+  assert.equal(prompts[0].event, 'before');
+  assert.equal(selected.length, 10);
+  assert.equal(selected[0].description, '注意事项 550');
+});
+
+test('space and literal separators create options from the selected input', async () => {
+  const baseRule = validateRules([{ ...manualRule, candidateSource: 'input-split' }])[0];
+  assert.deepEqual((await resolveCandidates({ ...baseRule, splitMode: 'space' }, '甲 乙   丙', signal)).map(row => row.description), ['甲', '乙', '丙']);
+  assert.deepEqual((await resolveCandidates({ ...baseRule, splitMode: 'literal', splitText: '||' }, '甲||乙||丙', signal)).map(row => row.description), ['甲', '乙', '丙']);
+});
+
+test('score thresholds and bottom count select the configured subset', async () => {
+  const entries = ['甲', '乙', '丙', '丁'].map((description, index) => ({ name: `item-${index + 1}`, description }));
+  const scores = { 'item-1': 0.1, 'item-2': 0.4, 'item-3': 0.7, 'item-4': 0.9 };
+  const stream = async function* () {
+    yield { type: 'text-delta', text: JSON.stringify({ scores }) };
+    yield { type: 'finish', reason: { kind: 'stop' } };
+  };
+  for (const [selectionMode, selectionValue, expected] of [
+    ['score-below', '50', ['乙', '甲']], ['score-above', '50', ['丁', '丙']], ['bottom', '2', ['乙', '甲']],
+  ]) {
+    const selected = await rankCatalog({ settings: { provider: 'test', model: 'ordinary' },
+      rule: { ...manualRule, selectionMode, selectionValue }, entries, input: '内容', signal, createMessage, stream });
+    assert.deepEqual(selected.map(row => row.description), expected);
+  }
 });

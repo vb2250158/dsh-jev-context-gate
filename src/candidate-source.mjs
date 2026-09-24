@@ -4,7 +4,13 @@ import { Worker } from 'node:worker_threads';
 export async function resolveCandidates(rule, input, signal) {
   signal?.throwIfAborted();
   let value;
-  if (rule.candidateSource === 'custom-list') value = rule.candidateText.split(/\r?\n/).map(text => text.trim()).filter(Boolean);
+  if (rule.candidateSource === 'custom-list' || rule.candidateSource === 'input-split') {
+    const content = rule.candidateSource === 'input-split' ? input : rule.candidateText;
+    const parts = rule.candidateSource === 'input-split' && rule.splitMode === 'space' ? content.split(/ +/)
+      : rule.candidateSource === 'input-split' && rule.splitMode === 'literal' ? content.split(rule.splitText)
+        : content.split(/\r?\n/);
+    value = parts.map(text => text.trim()).filter(Boolean);
+  }
   else if (rule.candidateSource === 'script') {
     const worker = new Worker(new URL('./candidate-worker.mjs', import.meta.url), {
       workerData: { script: rule.candidateScript, event: rule.phase, input },
@@ -22,7 +28,7 @@ export async function resolveCandidates(rule, input, signal) {
       });
     } finally { await worker.terminate(); }
   } else throw new TypeError('Unsupported candidate source');
-  if (!Array.isArray(value) || value.length < 2 || value.length > 500) throw new TypeError('候选项需要 2 至 500 条。');
+  if (!Array.isArray(value) || value.length < 2) throw new TypeError('候选项至少需要 2 条。');
   const ids = new Set();
   const entries = value.map((item, index) => {
     const id = typeof item === 'string' ? `item-${index + 1}` : item?.id;

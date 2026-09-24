@@ -19,7 +19,7 @@ test('Skill 裁剪 uses current visible context and rule-configured count, title
   assert.doesNotMatch(input, /全部 Skill/);
   const prompts = [];
   const selected = await rankCatalog({ settings: { provider: 'test', model: 'ordinary' },
-    rule: { ...rule, question: '与上下文最相关的 Skill 有哪些？', options: [{ ...rule.options[0], action: { type: 'keep-top-skills', text: '3' } }, rule.options[1]] },
+    rule: { ...rule, question: '与上下文最相关的 Skill 有哪些？', selectionValue: '3' },
     entries, input, signal, createMessage,
     stream: async function* (options) {
       prompts.push(JSON.parse(options.messages[0].content[0].text));
@@ -28,6 +28,7 @@ test('Skill 裁剪 uses current visible context and rule-configured count, title
     },
   });
   assert.equal(prompts[0].question, '与上下文最相关的 Skill 有哪些？');
+  assert.equal(prompts[0].options.length, 12);
   assert.deepEqual(selected.map(entry => entry.name), ['skill-11', 'skill-10', 'skill-9']);
   const original = { source: { kind: 'skill-catalog', form: 'catalog', entries }, content: [{ type: 'text', text: '<available_skills>\nall\n</available_skills>' }] };
   const pruned = pruneCatalogMessage(original, selected, value => value);

@@ -85,8 +85,10 @@ test('catalog trimming is a saved rule with a configurable top count', () => {
       { id: 'selected', label: '入选', action: { type: 'keep-top-skills', text: '10' } },
       { id: 'other', label: '未入选', action: { type: 'none', text: '' } },
     ] };
-  assert.equal(validateRules([catalogRule])[0].options[0].action.text, '10');
-  assert.throws(() => validateRules([{ ...catalogRule, options: [
-    { ...catalogRule.options[0], action: { type: 'keep-top-skills', text: '51' } }, catalogRule.options[1],
-  ] }]));
+  const migrated = validateRules([catalogRule])[0];
+  assert.equal(migrated.candidateSource, 'event-params');
+  assert.equal(migrated.candidateParameterKey, 'skills');
+  assert.equal(migrated.selectionValue, '10');
+  assert.deepEqual(migrated.options, []);
+  assert.throws(() => validateRules([{ ...catalogRule, selectionMode: 'score-above', selectionValue: '101' }]));
 });

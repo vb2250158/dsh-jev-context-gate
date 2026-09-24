@@ -29,6 +29,15 @@ test('default rules have option-owned actions and the schema migrates saved lega
     { id: 'no', label: '跳过', action: { type: 'skip-skill', text: '' } },
   ] };
   assert.equal(SettingsSchema({ rules: [injectionRule] }).rules[0].phase, 'skill-injection');
+  const priorCatalogRule = { ...DEFAULT_SETTINGS.rules[2], candidateSource: 'skill-catalog', options: [
+    { id: 'selected', label: '入选', action: { type: 'keep-top-skills', text: '5' } },
+    { id: 'other', label: '未入选', action: { type: 'none', text: '' } },
+  ], selectionValue: '' };
+  const migratedCatalog = SettingsSchema({ rules: [priorCatalogRule] }).rules[0];
+  assert.equal(migratedCatalog.candidateSource, 'event-params');
+  assert.equal(migratedCatalog.candidateParameterKey, 'skills');
+  assert.equal(migratedCatalog.selectionValue, '5');
+  assert.deepEqual(migratedCatalog.options, []);
 });
 
 test('browser rehydrates and validates the serialized settings schema', () => {

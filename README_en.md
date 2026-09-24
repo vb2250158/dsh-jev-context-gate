@@ -4,6 +4,12 @@ English | [简体中文](README.md)
 
 Jev rules for DSH. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Model IDs starting with `jev-` are labeled native; structured native calls still require a provider adapter.
 
+## 0.1.17
+
+Dynamic selection sends all candidates in one model request, requires a 0–1 score for each, then selects the top N, bottom N, scores above N%, or scores below N%. There is no fixed 100-item batch cap; the provider must still accommodate the full input and output. The legacy minimum relevance score remains editable under the additional minimum score control.
+
+Option sources include manual configuration, splitting judgement input by newline, space, or a specified string, a fixed line-delimited list, and a trusted script. Dynamic actions may trim candidates or inject additional content. Trimming on the before event injects the selected subset while preserving the original user message. The Skill catalog event exposes its `skills` parameter as options; the UI displays “Current available Skills” while settings save the stable parameter `key`, separate from its localizable `display`. Catalog trimming returns selected entries to the event and replaces that catalog. The default Skill trimming rule keeps the top 10, and the count is editable.
+
 ## 0.1.16
 
 The rule editor now exposes the top count directly. Change Skill trimming from 10 to 5 there. Candidate scoring uses one model request per batch of up to 100 items, with a finalist pass for larger sets; it does not send a separate request for each Skill. The relevance threshold applies even when the candidate count is below the top count.

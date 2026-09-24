@@ -15,6 +15,11 @@ export { evaluatePolicy } from './policy.mjs';
 export const name = 'dsh-jev-context-gate';
 export const inject = ['settings', 'llm', 'skills'];
 const contextMessage = (text, source = { kind: 'plugin', plugin: name, form: 'instructions' }) => createUserMessage({ content: [{ type: 'text', text }], source });
+const selectedText = (rule, selected) => {
+  const items = selected.map(entry => `- ${entry.description}`).join('\n');
+  return rule.selectionAction === 'inject-extra' ? rule.selectionActionText.replaceAll('{selected}', items)
+    : `[${rule.title || rule.id}]\n${items}`;
+};
 
 export function apply(ctx, config = {}) {
   const scope = ctx.settings.register(SETTINGS_NAMESPACE, SettingsSchema, { base: { ...DEFAULT_SETTINGS, ...Config(config) } });
@@ -56,11 +61,19 @@ export function apply(ctx, config = {}) {
       const input = catalogInput(rule, agent, decision.messages, settings.maxContextCharacters);
       if (!input) continue;
       try {
-        const prepared = await generateQuestion(rule, input, signal);
-        const entries = await rankCatalog({ settings, rule: prepared, entries: catalog.source.entries, input, signal,
+        const eventParameters = { skills: catalog.source.entries };
+        const candidates = eventParameters[rule.candidateParameterKey];
+        if (!Array.isArray(candidates)) throw new Error(`Jev event parameter ${rule.candidateParameterKey} is unavailable`);
+        const prepared = await generateQuestion(rule, input, signal, candidates);
+        const entries = await rankCatalog({ settings, rule: prepared, entries: candidates, input, signal,
           stream: options => ctx.llm.stream(options), createMessage: contextMessage });
         const messages = [...decision.messages];
-        messages[catalogIndex] = pruneCatalogMessage(catalog, entries, escapeText);
+        if (rule.selectionAction === 'prune') messages[catalogIndex] = pruneCatalogMessage(catalog, entries, escapeText);
+        else if (entries.length) {
+          const text = selectedText(rule, entries);
+          if (text.length > settings.maxContextCharacters) throw new Error('Selected candidate content exceeds context budget');
+          messages.splice(catalogIndex + 1, 0, contextMessage(text));
+        }
         decision = { ...decision, messages };
       } catch (error) {
         signal.throwIfAborted();
@@ -72,12 +85,12 @@ export function apply(ctx, config = {}) {
       const input = catalogInput(rule, agent, decision.messages, settings.maxContextCharacters);
       if (!input) continue;
       try {
-        const prepared = await generateQuestion(rule, input, signal);
         const candidates = await resolveCandidates(rule, input, signal);
+        const prepared = await generateQuestion(rule, input, signal, candidates);
         const selected = await rankCatalog({ settings, rule: prepared, entries: candidates, input, signal,
           stream: options => ctx.llm.stream(options), createMessage: contextMessage });
         if (!selected.length) continue;
-        const text = `[${rule.title || rule.id}]\n${selected.map(entry => `- ${entry.description}`).join('\n')}`;
+        const text = selectedText(rule, selected);
         if (text.length > settings.maxContextCharacters) throw new Error('Selected candidate content exceeds context budget');
         const messages = [...decision.messages];
         const explicitSkillIndex = messages.findIndex(message => message.source?.kind === 'skill-invocation');

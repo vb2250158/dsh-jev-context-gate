@@ -17,3 +17,14 @@ test('script cannot change option identities or behavior and invalid output fail
     questionScript: "return { title: '题目', options: [{ id: 'other', label: 'X' }, { id: 'no', label: '否' }] };" };
   await assert.rejects(() => generateQuestion(rule, 'x'), /无效选项/);
 });
+
+test('ranking question script receives the real event options', async () => {
+  const rule = { ...defaultRules[2], questionSource: 'script',
+    questionScript: "return { title: '选择相关 Skill', options: options.map(option => ({ id: option.id, label: option.label + '（可评分）' })) };" };
+  const candidates = Array.from({ length: 120 }, (_, index) => ({ name: `skill-${index}`, description: `用途 ${index}` }));
+  const generated = await generateQuestion(rule, '上下文', undefined, candidates);
+  assert.equal(generated.question, '选择相关 Skill');
+  assert.equal(generated.candidateOptions.length, 120);
+  assert.equal(generated.candidateOptions[119].id, 'skill-119');
+  assert.match(generated.candidateOptions[119].label, /可评分/);
+});
