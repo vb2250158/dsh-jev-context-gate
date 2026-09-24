@@ -18,20 +18,20 @@ const toDraft = (rules: Rule[]): DraftRule[] =>
 
 function validateDraft(rules: DraftRule[]): Rule[] {
   if (rules.length > 64) throw new Error('最多只能保存 64 条规则。')
-  return rules.map((rule, index) => {
-    const number = index + 1
-    if (rule.title.length > 120) throw new Error(`第 ${number} 条规则的标题不能超过 120 字。`)
-    if (rule.description.length > 500) throw new Error(`第 ${number} 条规则的说明不能超过 500 字。`)
-    if (rule.questionSource === 'configured' && !rule.question.trim()) throw new Error(`第 ${number} 条规则缺少题目标题。`)
-    if (rule.questionSource === 'script' && !rule.questionScript.trim()) throw new Error(`第 ${number} 条规则缺少题目生成脚本。`)
-    if (rule.input === 'custom-text' && !rule.customInput.trim()) throw new Error(`第 ${number} 条规则缺少自定义待判断内容。`)
-    if (rule.input === 'user-message-with-skills' && !rule.options.some(option => option.action.type === 'inject-skill')) throw new Error(`第 ${number} 条规则需要至少一个注入 Skill 的选项。`)
+  return rules.map(rule => {
+    const label = `规则「${rule.title.trim() || rule.description.trim() || '未命名'}」`
+    if (rule.title.length > 120) throw new Error(`${label}的标题不能超过 120 字。`)
+    if (rule.description.length > 500) throw new Error(`${label}的说明不能超过 500 字。`)
+    if (rule.questionSource === 'configured' && !rule.question.trim()) throw new Error(`${label}缺少题目标题。`)
+    if (rule.questionSource === 'script' && !rule.questionScript.trim()) throw new Error(`${label}缺少题目生成脚本。`)
+    if (rule.input === 'custom-text' && !rule.customInput.trim()) throw new Error(`${label}缺少自定义待判断内容。`)
+    if (rule.input === 'user-message-with-skills' && !rule.options.some(option => option.action.type === 'inject-skill')) throw new Error(`${label}需要至少一个注入 Skill 的选项。`)
     if (rule.phase === 'skill-catalog' && (rule.options.length !== 2 || rule.options[0].action.type !== 'keep-top-skills' || rule.options[1].action.type !== 'none'
-      || !/^[1-9][0-9]*$/.test(rule.options[0].action.text) || Number(rule.options[0].action.text) > 50)) throw new Error(`第 ${number} 条规则的 Skill 保留数量应为 1 至 50。`)
-    if (rule.options.some(option => option.action.type === 'inject-skill' && (option.action.text.length > 120 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(option.action.text)))) throw new Error(`第 ${number} 条规则的 Skill 名称应为 120 字以内的小写字母、数字和连字符。`)
-    if (rule.options.length < 2 || rule.options.length > 16 || rule.options.some(option => !option.label.trim() || (!['none', 'skip-skill'].includes(option.action.type) && !option.action.text.trim()))) throw new Error(`第 ${number} 条规则的选项文案或动作参数不完整。`)
+      || !/^[1-9][0-9]*$/.test(rule.options[0].action.text) || Number(rule.options[0].action.text) > 50)) throw new Error(`${label}的 Skill 保留数量应为 1 至 50。`)
+    if (rule.options.some(option => option.action.type === 'inject-skill' && (option.action.text.length > 120 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(option.action.text)))) throw new Error(`${label}的 Skill 名称应为 120 字以内的小写字母、数字和连字符。`)
+    if (rule.options.length < 2 || rule.options.length > 16 || rule.options.some(option => !option.label.trim() || (!['none', 'skip-skill'].includes(option.action.type) && !option.action.text.trim()))) throw new Error(`${label}的选项文案或动作参数不完整。`)
     const threshold = Number(rule.thresholdPercent)
-    if (!rule.thresholdPercent.trim() || !Number.isFinite(threshold) || threshold < 0 || threshold > 100) throw new Error(`第 ${number} 条规则的阈值应为 0 至 100%。`)
+    if (!rule.thresholdPercent.trim() || !Number.isFinite(threshold) || threshold < 0 || threshold > 100) throw new Error(`${label}的阈值应为 0 至 100%。`)
     const { thresholdPercent: _thresholdPercent, ...fields } = rule
     return { ...fields, threshold: threshold / 100 }
   })
@@ -54,7 +54,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
   const [rulesError, setRulesError] = React.useState<string>()
   const [draftRules, setDraftRules] = React.useState<DraftRule[] | null>(null)
   const [sourceRules, setSourceRules] = React.useState<string | null>(null)
-  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set())
+  const [editingRule, setEditingRule] = React.useState<{ id: string; baseline: DraftRule | null } | null>(null)
   const [page, setPage] = React.useState<'rules' | 'test'>('rules')
   const savingRef = React.useRef(false)
   const request = React.useRef(0)
@@ -69,7 +69,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
     if (!current || (draftRules !== null && dirty)) return
     setDraftRules(toDraft(current.rules))
     setSourceRules(JSON.stringify(current.rules))
-    if (draftRules === null) setExpandedIds(new Set())
+    setEditingRule(null)
   }, [savedRules])
 
   const updateRule = (id: string, changes: Partial<DraftRule>): void => {
@@ -82,19 +82,36 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
     setSourceRules(JSON.stringify(current.rules))
     setRulesError(undefined)
   }
-  const saveRules = (): void => {
-    if (!writable || !draftRules || !dirty || changedElsewhere || savingRef.current) return
+  const saveRules = async (): Promise<boolean> => {
+    if (!writable || !draftRules || !dirty || changedElsewhere || savingRef.current) return false
     let rules: Rule[]
     try { rules = validateDraft(draftRules) }
-    catch (error) { setRulesError(error instanceof Error ? error.message : String(error)); return }
+    catch (error) { setRulesError(error instanceof Error ? error.message : String(error)); return false }
     savingRef.current = true
     setSaving(true)
     setSaveError(undefined)
     setRulesError(undefined)
-    void scope.mutate([{ op: 'set', path: ['rules'], value: rules }])
-      .then(() => { setDraftRules(toDraft(rules)); setSourceRules(JSON.stringify(rules)) })
-      .catch((error: unknown) => setSaveError(error instanceof Error ? error.message : String(error)))
-      .finally(() => { savingRef.current = false; setSaving(false) })
+    try {
+      await scope.mutate([{ op: 'set', path: ['rules'], value: rules }])
+      setDraftRules(toDraft(rules))
+      setSourceRules(JSON.stringify(rules))
+      return true
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error))
+      return false
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
+  }
+  const closeEditor = (): void => {
+    if (!editingRule || savingRef.current) return
+    setDraftRules(rules => editingRule.baseline === null
+      ? rules?.filter(rule => rule.id !== editingRule.id) ?? null
+      : rules?.map(rule => rule.id === editingRule.id ? editingRule.baseline! : rule) ?? null)
+    setEditingRule(null)
+    setRulesError(undefined)
+    setSaveError(undefined)
   }
   const refreshCatalog = (): void => {
     const generation = ++request.current
@@ -165,17 +182,20 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
             setDraftRules(rules => [...(rules ?? []), { id, enabled: true, title: '', description: '', phase: 'before', input: 'latest-user-message', customInput: '',
               questionSource: 'configured', questionScript: '', question: '', thresholdPercent: '80',
               options: [{ id: 'yes', label: '是', action: { type: 'inject-context', text: '' } }, { id: 'no', label: '否', action: { type: 'none', text: '' } }] }])
-            setExpandedIds(new Set([id]))
+            setEditingRule({ id, baseline: null })
           }}>添加规则</Button>
           <span className={dirty ? styles.unsaved : styles.saved}>{dirty ? '有未保存的修改' : '规则已保存'}</span>
           <Button variant="ghost" size="sm" disabled={!writable || !dirty} onClick={discardRules}>放弃修改</Button>
-          <Button variant="primary" size="sm" disabled={!writable || !dirty || changedElsewhere} onClick={saveRules}>保存规则</Button>
+          <Button variant="primary" size="sm" disabled={!writable || !dirty || changedElsewhere} onClick={() => { void saveRules() }}>保存规则</Button>
         </div>
-        <div className={styles.ruleList}>{(draftRules ?? toDraft(current.rules)).map((rule, index) =>
-          <JevRuleEditor key={rule.id} rule={rule} index={index} expanded={expandedIds.has(rule.id)} writable={writable}
+        <div className={styles.ruleList}>{(draftRules ?? toDraft(current.rules)).map(rule =>
+          <JevRuleEditor key={rule.id} rule={rule} editing={editingRule?.id === rule.id} writable={writable} saving={saving} canSave={writable && dirty && !changedElsewhere}
+            error={editingRule?.id === rule.id ? rulesError ?? saveError : undefined}
             update={next => updateRule(rule.id, next)}
-            remove={() => setDraftRules(rules => rules?.filter(item => item.id !== rule.id) ?? null)}
-            toggle={() => setExpandedIds(ids => ids.has(rule.id) ? new Set() : new Set([rule.id]))} />
+            remove={() => { setDraftRules(rules => rules?.filter(item => item.id !== rule.id) ?? null); setEditingRule(null) }}
+            openEditor={() => { setRulesError(undefined); setSaveError(undefined); setEditingRule({ id: rule.id, baseline: structuredClone(rule) }) }}
+            closeEditor={closeEditor}
+            saveEditor={() => { void saveRules().then(saved => { if (saved) setEditingRule(null) }) }} />
         )}</div>
         {draftRules?.length === 0 && <p className={styles.empty}>还没有规则。添加一条规则，选择事件并配置题目、选项与行为。</p>}
         {changedElsewhere && <p className={styles.error} role="alert">规则已在别处更新。请放弃本地修改并查看最新内容。</p>}

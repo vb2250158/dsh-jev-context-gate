@@ -14,15 +14,13 @@
 .ruleList { display:grid; gap:10px; }
 .ruleCard { overflow:hidden; border:0.5px solid var(--dsw-alias-border-l2); border-radius:12px; background:var(--dsw-alias-bg-layer-1); }
 .ruleHeader { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:12px; }
-.ruleSummary { min-width:0; display:grid; gap:3px; }
+.ruleSummary { min-width:0; display:grid; align-content:center; gap:4px; }
 .ruleSummary strong { font-size:15px; font-weight:650; line-height:1.4; overflow-wrap:anywhere; }
-.ruleDescription, .ruleSummarySub { color:var(--dsw-alias-label-secondary); font-size:12px; line-height:1.4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.ruleMeta { display:flex; flex-wrap:wrap; align-items:center; gap:7px; font-size:12px; line-height:1.4; }
-.ruleNumber { font-weight:700; }
-.phaseBefore, .phaseAfter, .threshold { padding:3px 7px; border-radius:6px; color:var(--dsw-alias-label-secondary); background:var(--dsw-alias-bg-layer-2); }
-.phaseAfter { opacity:.75; }
-.ruleControls { display:flex; align-items:center; gap:9px; flex:none; padding-top:12px; }
-.ruleBody { display:grid; gap:10px; padding:12px; border-top:0.5px solid var(--dsw-alias-border-l2); }
+.ruleDescription { color:var(--dsw-alias-label-secondary); font-size:12px; line-height:1.5; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; overflow-wrap:anywhere; }
+.ruleControls { display:flex; align-items:center; gap:9px; flex:none; }
+.ruleEditorModal { width:min(760px, 100%); max-height:calc(100dvh - 48px); gap:0; }
+.ruleEditorContent { min-height:0; overflow-y:auto; }
+.ruleBody { display:grid; gap:10px; }
 .ruleStage { display:grid; gap:8px; padding:9px 0 0; border-top:0.5px solid var(--dsw-alias-border-l2); }
 .stageHeading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .stageHeading strong { color:var(--dsw-alias-label-primary); font-size:13px; }

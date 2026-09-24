@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Button, Input, Menu, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, Menu, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import styles from './JevSettingsSection.module.css'
 
 export type Action = { type: 'none' | 'inject-context' | 'inject-skill' | 'append-reminder' | 'skip-skill' | 'keep-top-skills'; text: string }
@@ -21,12 +21,6 @@ const inputNames: Record<string, string> = {
   'tool-results': '本轮工具结果',
   'custom-text': '自定义文字',
 }
-const inputSummaryNames: Record<string, string> = {
-  'latest-user-message': '最新消息', 'current-context-text': '当前上下文',
-  'user-message-with-skills': '消息 + Skill',
-  'skill-summary': 'Skill 简介', 'skill-content': 'Skill 正文',
-  'tool-results': '工具结果', 'custom-text': '自定义文字',
-}
 const actionNames: Record<Action['type'], string> = {
   none: '不执行动作', 'inject-context': '补充主会话上下文', 'inject-skill': '注入 Skill 正文', 'append-reminder': '在答复末尾追加提醒', 'skip-skill': '跳过此次 Skill 注入', 'keep-top-skills': '保留最相关的 Skill',
 }
@@ -41,13 +35,13 @@ function Choice({ label, value, choices, disabled, onSelect }: {
     anchor={<Button className={styles.choiceButton} variant="outline" size="sm" disabled={disabled} aria-label={`${label}：${selectedLabel}`} aria-haspopup="menu" aria-expanded={open && !disabled} onClick={() => setOpen(true)}><span className={styles.choiceValue}>{selectedLabel}</span><span aria-hidden="true">▾</span></Button>} /></div>
 }
 
-/** Event, input, question and option-owned actions are edited in one rule card. */
-export function JevRuleEditor({ rule, index, expanded, writable, update, remove, toggle }: {
-  rule: DraftRule; index: number; expanded: boolean; writable: boolean
-  update: (rule: DraftRule) => void; remove: () => void; toggle: () => void
+/** Edit one rule in a dialog while its card shows the configured title and description. */
+export function JevRuleEditor({ rule, editing, writable, saving, canSave, error, update, remove, openEditor, closeEditor, saveEditor }: {
+  rule: DraftRule; editing: boolean; writable: boolean; saving: boolean; canSave: boolean; error?: string
+  update: (rule: DraftRule) => void; remove: () => void; openEditor: () => void; closeEditor: () => void; saveEditor: () => void
 }): React.ReactNode {
   const [expandedActionId, setExpandedActionId] = React.useState<string | null>(null)
-  React.useEffect(() => { if (!expanded) setExpandedActionId(null) }, [expanded])
+  React.useEffect(() => { if (!editing) setExpandedActionId(null) }, [editing])
   const set = (changes: Partial<DraftRule>): void => update({ ...rule, ...changes })
   const updateOption = (id: string, changes: Partial<RuleOption>): void =>
     set({ options: rule.options.map(option => option.id === id ? { ...option, ...changes } : option) })
@@ -91,17 +85,20 @@ export function JevRuleEditor({ rule, index, expanded, writable, update, remove,
       : rule.input === 'tool-results'
         ? '运行时读取本轮工具结果的 ID、成功状态和文字；没有工具结果时不判断。'
         : '运行时读取最新一条用户消息的文字；不包含整段会话、图片或文件。'
+  const title = rule.title.trim()
+  const description = rule.description.trim()
+  const displayTitle = title || description || '未命名规则'
   return <article className={styles.ruleCard}>
     <div className={styles.ruleHeader}>
       <div className={styles.ruleSummary}>
-        <div className={styles.ruleMeta}><span className={styles.ruleNumber}>规则 {index + 1}</span><span className={rule.phase === 'before' ? styles.phaseBefore : styles.phaseAfter}>{eventNames[rule.phase]}</span><span className={styles.threshold}>{inputSummaryNames[rule.input] ?? '未设置内容'} · {rule.thresholdPercent || '—'}%</span></div>
-        <strong>{rule.title.trim() || `规则 ${index + 1}`}</strong>
-        <span className={styles.ruleDescription}>{rule.description.trim() || '未填写规则说明'}</span>
-        <span className={styles.ruleSummarySub}>题目：{rule.questionSource === 'script' ? '脚本运行时生成' : rule.question.trim() || '未填写'} · {rule.phase === 'skill-catalog' ? `Skill 动态选项，最多 ${rule.options[0]?.action.text || '—'} 条` : `${rule.options.length} 个选项`}</span>
+        <strong>{displayTitle}</strong>
+        {title && description && <span className={styles.ruleDescription}>{description}</span>}
       </div>
-      <div className={styles.ruleControls}><Switch checked={rule.enabled} disabled={!writable} label={`启用规则 ${index + 1}`} onChange={enabled => set({ enabled })} /><Button variant="outline" size="sm" aria-expanded={expanded} aria-controls={`jev-rule-${rule.id}`} onClick={toggle}>{expanded ? '收起' : '编辑'}</Button></div>
+      <div className={styles.ruleControls}><Switch checked={rule.enabled} disabled={!writable} label={`启用${displayTitle}`} onChange={enabled => set({ enabled })} /><Button variant="outline" size="sm" onClick={openEditor}>编辑</Button></div>
     </div>
-    {expanded && <div className={styles.ruleBody} id={`jev-rule-${rule.id}`}>
+    <Modal open={editing} onClose={closeEditor} title={displayTitle} closeLabel="关闭规则编辑" className={styles.ruleEditorModal} contentClassName={styles.ruleEditorContent}
+      footer={<><Button variant="ghost" size="sm" onClick={closeEditor}>取消</Button><Button variant="primary" size="sm" disabled={!canSave || saving} onClick={saveEditor}>{saving ? '正在保存…' : '保存规则'}</Button></>}>
+      <div className={styles.ruleBody}>
       <label className={styles.field}>规则标题<Input value={rule.title} maxLength={120} disabled={!writable} placeholder="例如：先查证据" onChange={event => set({ title: event.currentTarget.value })} /></label>
       <label className={styles.field}>规则说明<Input value={rule.description} maxLength={500} disabled={!writable} placeholder="用一句话说明这条规则的用途" onChange={event => set({ description: event.currentTarget.value })} /></label>
       <div className={styles.ruleStage}>
@@ -128,7 +125,7 @@ export function JevRuleEditor({ rule, index, expanded, writable, update, remove,
       <div className={styles.ruleStage}><div className={styles.stageHeading}><strong>选项与行为</strong><span>{rule.phase === 'skill-catalog' ? '运行时生成' : `${rule.options.length} 个选项`}</span></div>
         {rule.phase === 'skill-catalog' && <p className={styles.actionPreview}>候选选项从当前可用 Skill 的名称和简介生成。判定模型分别给出相关度，再按下方数量保留最高分的 Skill。</p>}
         <div className={styles.ruleOptions}>{rule.options.map((option, optionIndex) => <div className={styles.ruleOption} key={option.id}>
-          <div className={styles.optionTitle}><span className={styles.optionLetter}>{String.fromCharCode(65 + optionIndex)}</span><label className={styles.field}>选项文案<Input value={option.label} maxLength={800} disabled={!writable} aria-label={`规则 ${index + 1} 选项 ${optionIndex + 1}`} onChange={event => updateOption(option.id, { label: event.currentTarget.value })} /></label>
+          <div className={styles.optionTitle}><span className={styles.optionLetter}>{String.fromCharCode(65 + optionIndex)}</span><label className={styles.field}>选项文案<Input value={option.label} maxLength={800} disabled={!writable} aria-label={`${displayTitle}，选项 ${optionIndex + 1}`} onChange={event => updateOption(option.id, { label: event.currentTarget.value })} /></label>
             {rule.phase !== 'skill-catalog' && <Button variant="ghost" size="sm" disabled={!writable || rule.options.length <= 2} onClick={() => set({ options: rule.options.filter(item => item.id !== option.id) })}>移除</Button>}</div>
           <div className={styles.optionActionControls}>
             <Choice label="命中后" value={option.action.type} disabled={!writable} choices={rule.phase === 'before'
@@ -150,6 +147,8 @@ export function JevRuleEditor({ rule, index, expanded, writable, update, remove,
         {rule.phase !== 'skill-catalog' && <Button variant="outline" size="sm" disabled={!writable || rule.options.length >= 16} onClick={() => set({ options: [...rule.options, { id: `option-${crypto.randomUUID().replaceAll('-', '')}`, label: '', action: { type: 'none', text: '' } }] })}>添加选项</Button>}
       </div>
       <div className={styles.ruleFooter}><Button variant="ghost" size="sm" disabled={!writable} onClick={remove}>删除规则</Button></div>
-    </div>}
+      {error && <p className={styles.error} role="alert">{error}</p>}
+      </div>
+    </Modal>
   </article>
 }

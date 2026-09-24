@@ -4,6 +4,10 @@ English | [简体中文](README.md)
 
 Jev rules for DSH. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Model IDs starting with `jev-` are labeled native; structured native calls still require a provider adapter.
 
+## 0.1.15
+
+The rule list shows each configured title and description without generated rule numbers or extra summary tags. Edit opens a separate dialog for the event, input, question, and option actions. Save persists the changes; Cancel discards edits made in that dialog. If an older rule has no title, its description names the list item; if both are empty, it appears as an unnamed rule.
+
 ## 0.1.14
 
 The configured “Skill trimming” rule handles the host Skill catalog before injection. It reads visible conversation context, asks “Which Skills are most relevant to the current context?”, derives candidate options from available Skill names and descriptions, and keeps the top 10 summaries. The title, question, input, threshold, count and enabled state are editable rule data. A before-event option can also name a Skill to load through the DSH Skill service. A separate “Skill body about to be injected” event judges each Jev-selected full body before insertion. User-explicit Skill invocation keeps the host behavior.
