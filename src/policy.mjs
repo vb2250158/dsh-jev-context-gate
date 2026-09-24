@@ -7,13 +7,16 @@ export function validateRules(rules) {
   return rules.map(rule => {
     if (!rule || typeof rule.id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(rule.id) || ids.has(rule.id)) throw new TypeError('Invalid or duplicate rule id');
     ids.add(rule.id);
-    if (!['before', 'after'].includes(rule.phase) || typeof rule.enabled !== 'boolean') throw new TypeError('Invalid rule event');
+    if (!['before', 'after', 'skill-injection', 'skill-catalog'].includes(rule.phase) || typeof rule.enabled !== 'boolean') throw new TypeError('Invalid rule event');
     const title = rule.title ?? '';
     if (typeof title !== 'string' || title.length > 120) throw new TypeError('Invalid rule title');
     const description = rule.description ?? '';
     if (typeof description !== 'string' || description.length > 500) throw new TypeError('Invalid rule description');
-    const input = rule.input || (rule.phase === 'before' ? 'latest-user-message' : 'tool-results');
-    if (rule.phase === 'before' ? !['latest-user-message', 'current-context-text', 'custom-text'].includes(input) : !['tool-results', 'custom-text'].includes(input)) throw new TypeError('Invalid rule input');
+    const input = rule.input || (rule.phase === 'after' ? 'tool-results' : rule.phase === 'skill-injection' ? 'skill-summary' : 'latest-user-message');
+    if (rule.phase === 'before' ? !['latest-user-message', 'current-context-text', 'user-message-with-skills', 'custom-text'].includes(input)
+      : rule.phase === 'after' ? !['tool-results', 'custom-text'].includes(input)
+        : rule.phase === 'skill-injection' ? !['skill-summary', 'skill-content', 'latest-user-message', 'current-context-text', 'custom-text'].includes(input)
+          : !['current-context-text', 'latest-user-message', 'custom-text'].includes(input)) throw new TypeError('Invalid rule input');
     const customInput = rule.customInput ?? '';
     if (typeof customInput !== 'string' || customInput.length > 24000 || (input === 'custom-text' && !customInput.trim())) throw new TypeError('Invalid custom input');
     const questionSource = rule.questionSource || 'configured';
@@ -27,17 +30,21 @@ export function validateRules(rules) {
       rule.phase === 'before'
         ? [{ id: 'yes', label: '是', action: { type: 'inject-context', text: rule.context } }, { id: 'no', label: '否', action: { type: 'none', text: '' } }]
         : [{ id: 'failed', label: '有失败', action: { type: 'append-reminder', text: rule.context } }, { id: 'success', label: '全部成功', action: { type: 'none', text: '' } }];
-    if (options.length < 2 || options.length > 16 || (rule.phase === 'after' && (options.length !== 2 || options[0].id !== 'failed' || options[1].id !== 'success'))) throw new TypeError('Invalid options');
+    if (options.length < 2 || options.length > 16) throw new TypeError('Invalid options');
+    if (rule.phase === 'skill-catalog' && (options.length !== 2 || options[0].action?.type !== 'keep-top-skills' || options[1].action?.type !== 'none'
+      || !/^[1-9][0-9]*$/.test(options[0].action.text) || Number(options[0].action.text) > 50)) throw new TypeError('Invalid Skill catalog action');
     const optionIds = new Set(), labels = new Set();
     const validOptions = options.map(option => {
       if (!option || typeof option.id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(option.id) || optionIds.has(option.id)
         || typeof option.label !== 'string' || !option.label.trim() || option.label.length > 800 || labels.has(option.label.trim())) throw new TypeError('Invalid option');
       optionIds.add(option.id); labels.add(option.label.trim());
       const action = option.action;
-      const validTypes = rule.phase === 'before' ? ['none', 'inject-context'] : ['none', 'append-reminder'];
-      if (!action || !validTypes.includes(action.type) || typeof action.text !== 'string' || action.text.length > 8000 || (action.type !== 'none' && !action.text.trim())) throw new TypeError('Invalid option action');
-      return { id: option.id, label: option.label, action: { type: action.type, text: action.type === 'none' ? '' : action.text } };
+      const validTypes = rule.phase === 'before' ? ['none', 'inject-context', 'inject-skill'] : rule.phase === 'after' ? ['none', 'append-reminder'] : rule.phase === 'skill-injection' ? ['none', 'skip-skill', 'inject-context'] : ['none', 'keep-top-skills'];
+      if (!action || !validTypes.includes(action.type) || typeof action.text !== 'string' || action.text.length > 8000 || (!['none', 'skip-skill'].includes(action.type) && !action.text.trim())
+        || (action.type === 'inject-skill' && (action.text.length > 120 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(action.text)))) throw new TypeError('Invalid option action');
+      return { id: option.id, label: option.label, action: { type: action.type, text: ['none', 'skip-skill'].includes(action.type) ? '' : action.text } };
     });
+    if (input === 'user-message-with-skills' && !validOptions.some(option => option.action.type === 'inject-skill')) throw new TypeError('Skill-aware input requires a skill action');
     return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, input, customInput, questionSource, questionScript, question, options: validOptions, threshold: rule.threshold };
   });
 }
@@ -45,9 +52,10 @@ export function validateRules(rules) {
 /** Select the highest-scored option; only its configured action can affect the session. */
 export function evaluatePolicy({ rules, phase, verdicts, maxCharacters = 12000 }) {
   const valid = validateRules(rules);
-  if (!['before', 'after'].includes(phase)) throw new TypeError('Invalid phase');
+  if (!['before', 'after', 'skill-injection'].includes(phase)) throw new TypeError('Invalid phase');
   if (!Number.isSafeInteger(maxCharacters) || maxCharacters < 0 || maxCharacters > 64000) throw new TypeError('Invalid context budget');
-  const decisions = [], chunks = [];
+  const decisions = [], chunks = [], skillRequests = [];
+  let skipSkill = false;
   let length = 0;
   for (const rule of valid.filter(row => row.enabled && row.phase === phase)) {
     const scores = verdicts?.[rule.id]?.probabilities;
@@ -61,11 +69,21 @@ export function evaluatePolicy({ rules, phase, verdicts, maxCharacters = 12000 }
     const score = scores[selected.id] / total;
     if (score < rule.threshold) { decisions.push({ ruleId: rule.id, optionId: selected.id, status: 'below-threshold', score }); continue; }
     if (selected.action.type === 'none') { decisions.push({ ruleId: rule.id, optionId: selected.id, status: 'no-action', score }); continue; }
+    if (selected.action.type === 'skip-skill') {
+      skipSkill = true;
+      decisions.push({ ruleId: rule.id, optionId: selected.id, status: 'applied', score });
+      continue;
+    }
+    if (selected.action.type === 'inject-skill') {
+      skillRequests.push({ ruleId: rule.id, optionId: selected.id, name: selected.action.text });
+      decisions.push({ ruleId: rule.id, optionId: selected.id, status: 'pending-skill', score });
+      continue;
+    }
     const text = `[${rule.id} · ${selected.label}]\n${selected.action.text}`;
     const added = text.length + (chunks.length ? 2 : 0);
     if (length + added > maxCharacters) { decisions.push({ ruleId: rule.id, optionId: selected.id, status: 'budget-exceeded', score }); continue; }
     chunks.push(text); length += added;
     decisions.push({ ruleId: rule.id, optionId: selected.id, status: 'applied', score });
   }
-  return { decisions, context: chunks.join('\n\n') };
+  return { decisions, context: chunks.join('\n\n'), skillRequests, skipSkill };
 }

@@ -18,6 +18,17 @@ test('default rules have option-owned actions and the schema migrates saved lega
   assert.equal(SettingsSchema({ rules: [{ ...DEFAULT_SETTINGS.rules[0], title: '可编辑的规则标题' }] }).rules[0].title, '可编辑的规则标题');
   assert.throws(() => SettingsSchema({ rules: [{ ...DEFAULT_SETTINGS.rules[0], title: '长'.repeat(121) }] }));
   assert.throws(() => SettingsSchema({ rules: [{ ...DEFAULT_SETTINGS.rules[0], description: '长'.repeat(501) }] }));
+  const skillRule = { ...DEFAULT_SETTINGS.rules[0], input: 'user-message-with-skills', options: [
+    { id: 'yes', label: '使用 Skill', action: { type: 'inject-skill', text: 'code-review' } },
+    DEFAULT_SETTINGS.rules[0].options[1],
+  ] };
+  assert.equal(SettingsSchema({ rules: [skillRule] }).rules[0].options[0].action.text, 'code-review');
+  assert.throws(() => SettingsSchema({ rules: [{ ...skillRule, options: DEFAULT_SETTINGS.rules[0].options }] }));
+  const injectionRule = { ...skillRule, phase: 'skill-injection', input: 'skill-summary', question: '是否继续注入？', options: [
+    { id: 'yes', label: '继续', action: { type: 'none', text: '' } },
+    { id: 'no', label: '跳过', action: { type: 'skip-skill', text: '' } },
+  ] };
+  assert.equal(SettingsSchema({ rules: [injectionRule] }).rules[0].phase, 'skill-injection');
 });
 
 test('browser rehydrates and validates the serialized settings schema', () => {
@@ -25,5 +36,12 @@ test('browser rehydrates and validates the serialized settings schema', () => {
   assert.deepEqual(browserSchema(DEFAULT_SETTINGS), DEFAULT_SETTINGS);
   assert.equal(browserSchema({ rules: [{ ...DEFAULT_SETTINGS.rules[0], description: '浏览器中保存的说明' }] }).rules[0].description, '浏览器中保存的说明');
   assert.equal(browserSchema({ rules: [{ ...DEFAULT_SETTINGS.rules[0], title: '浏览器中保存的标题' }] }).rules[0].title, '浏览器中保存的标题');
+  assert.equal(browserSchema({ rules: [{ ...DEFAULT_SETTINGS.rules[0], options: [
+    { id: 'yes', label: '使用 Skill', action: { type: 'inject-skill', text: 'code-review' } }, DEFAULT_SETTINGS.rules[0].options[1],
+  ] }] }).rules[0].options[0].action.type, 'inject-skill');
+  assert.equal(browserSchema({ rules: [{ ...DEFAULT_SETTINGS.rules[0], phase: 'skill-injection', input: 'skill-summary', options: [
+    { id: 'yes', label: '继续', action: { type: 'none', text: '' } },
+    { id: 'no', label: '跳过', action: { type: 'skip-skill', text: '' } },
+  ] }] }).rules[0].options[1].action.type, 'skip-skill');
   assert.throws(() => browserSchema({ ...DEFAULT_SETTINGS, rules: [DEFAULT_SETTINGS.rules[0], DEFAULT_SETTINGS.rules[0]] }));
 });

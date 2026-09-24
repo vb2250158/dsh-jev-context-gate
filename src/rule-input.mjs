@@ -1,9 +1,30 @@
 /** Read exactly the user-selected text source from the model-visible pre-step messages. */
-export function beforeInput(rule, messages) {
+export function beforeInput(rule, messages, skillSummaries = []) {
   if (rule.input === 'custom-text') return rule.customInput;
   const latest = messages.findLast(message => message.source.kind === 'user');
+  if (rule.input === 'user-message-with-skills') {
+    if (!latest) return '';
+    const userMessage = latest.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
+    if (!userMessage.trim()) return '';
+    const names = new Set(rule.options.filter(option => option.action.type === 'inject-skill').map(option => option.action.text));
+    const skills = skillSummaries.filter(skill => names.has(skill.name) && skill.invocation.modelInvocable)
+      .map(skill => ({ name: skill.name, description: skill.description.slice(0, 500) }));
+    return skills.length ? JSON.stringify({ userMessage, skills }) : '';
+  }
   const rows = rule.input === 'latest-user-message' ? (latest ? [latest] : []) : messages;
   return rows.flatMap(row => row.content.filter(block => block.type === 'text').map(block => block.text)).join('\n');
+}
+
+/** Prepare the configured input for one Jev-managed skill before its body is injected. */
+export function skillInput(rule, skill, messages) {
+  if (rule.input === 'custom-text') return rule.customInput;
+  if (rule.input === 'skill-content') return JSON.stringify({ name: skill.name, content: skill.content });
+  const latest = messages.findLast(message => message.source?.kind === 'user');
+  const userMessage = latest?.content.filter(block => block.type === 'text').map(block => block.text).join('\n') ?? '';
+  if (rule.input === 'skill-summary') return JSON.stringify({ userMessage, skill: { name: skill.name, description: skill.description } });
+  if (rule.input === 'latest-user-message') return userMessage;
+  if (rule.input === 'current-context-text') return messages.flatMap(row => row.content.filter(block => block.type === 'text').map(block => block.text)).join('\n');
+  return '';
 }
 
 /** Preserve host tool status and tool text without extracting claims from the model's answer. */

@@ -25,7 +25,11 @@ function validateDraft(rules: DraftRule[]): Rule[] {
     if (rule.questionSource === 'configured' && !rule.question.trim()) throw new Error(`第 ${number} 条规则缺少题目标题。`)
     if (rule.questionSource === 'script' && !rule.questionScript.trim()) throw new Error(`第 ${number} 条规则缺少题目生成脚本。`)
     if (rule.input === 'custom-text' && !rule.customInput.trim()) throw new Error(`第 ${number} 条规则缺少自定义待判断内容。`)
-    if (rule.options.length < 2 || rule.options.length > 16 || rule.options.some(option => !option.label.trim() || (option.action.type !== 'none' && !option.action.text.trim()))) throw new Error(`第 ${number} 条规则的选项文案或动作参数不完整。`)
+    if (rule.input === 'user-message-with-skills' && !rule.options.some(option => option.action.type === 'inject-skill')) throw new Error(`第 ${number} 条规则需要至少一个注入 Skill 的选项。`)
+    if (rule.phase === 'skill-catalog' && (rule.options.length !== 2 || rule.options[0].action.type !== 'keep-top-skills' || rule.options[1].action.type !== 'none'
+      || !/^[1-9][0-9]*$/.test(rule.options[0].action.text) || Number(rule.options[0].action.text) > 50)) throw new Error(`第 ${number} 条规则的 Skill 保留数量应为 1 至 50。`)
+    if (rule.options.some(option => option.action.type === 'inject-skill' && (option.action.text.length > 120 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(option.action.text)))) throw new Error(`第 ${number} 条规则的 Skill 名称应为 120 字以内的小写字母、数字和连字符。`)
+    if (rule.options.length < 2 || rule.options.length > 16 || rule.options.some(option => !option.label.trim() || (!['none', 'skip-skill'].includes(option.action.type) && !option.action.text.trim()))) throw new Error(`第 ${number} 条规则的选项文案或动作参数不完整。`)
     const threshold = Number(rule.thresholdPercent)
     if (!rule.thresholdPercent.trim() || !Number.isFinite(threshold) || threshold < 0 || threshold > 100) throw new Error(`第 ${number} 条规则的阈值应为 0 至 100%。`)
     const { thresholdPercent: _thresholdPercent, ...fields } = rule

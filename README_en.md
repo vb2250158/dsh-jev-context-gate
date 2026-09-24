@@ -4,6 +4,10 @@ English | [简体中文](README.md)
 
 Jev rules for DSH. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Model IDs starting with `jev-` are labeled native; structured native calls still require a provider adapter.
 
+## 0.1.14
+
+The configured “Skill trimming” rule handles the host Skill catalog before injection. It reads visible conversation context, asks “Which Skills are most relevant to the current context?”, derives candidate options from available Skill names and descriptions, and keeps the top 10 summaries. The title, question, input, threshold, count and enabled state are editable rule data. A before-event option can also name a Skill to load through the DSH Skill service. A separate “Skill body about to be injected” event judges each Jev-selected full body before insertion. User-explicit Skill invocation keeps the host behavior.
+
 ## 0.1.13
 
 Rule title, rule description, and question title are saved separately. Collapsed cards show the rule title and description. Editing opens one rule at a time, option action text expands on demand, and save controls stay above the list. Existing rules without titles show their rule number until edited.
@@ -22,11 +26,13 @@ The browser migrates legacy rules before rendering the rule editor, avoiding a t
 
 ## Rule behavior
 
-The user-message event runs at `agent/pre-step` and can append configured context to the main session. The tool-result event runs when `llm/stream` sees tool results and can append a reminder before the final finish chunk. The judge receives the title and all 2–16 option labels. Only the highest-probability option can act, and only above the configured threshold. Invalid results, missing input, script failure, or a context-budget overrun execute no action. Generic-model probabilities are estimates, not calibrated confidence.
+The user-message event runs at `agent/pre-step` and can append configured context or request a named Skill. The Skill-injection event runs before each Jev-selected Skill body enters the session; a selected skip action blocks that candidate. If enabled Skill-event rules cannot be judged, that injection is omitted. The tool-result event runs when `llm/stream` sees tool results and can append a reminder before the final finish chunk. The judge receives the title and all 2–16 option labels. Only the highest-probability option can act, and only above the configured threshold. Invalid results, missing input, script failure, or a context-budget overrun execute no action. Generic-model probabilities are estimates, not calibrated confidence.
+
+Skill trimming filters summary catalog entries, not full Skill bodies. If ranking fails, the host catalog remains and a warning is logged. A full catalog already recorded in an older session remains in that history; a new session is filtered on its first injection.
 
 ## Question script
 
-The script body receives `event` (`before` or `after`), `input`, and `options` (`[{ id, label }]`). It can use `await import(...)` and local Node APIs. Within five seconds it must return:
+The script body receives `event` (`before`, `skill-catalog`, `skill-injection`, or `after`), `input`, and `options` (`[{ id, label }]`). It can use `await import(...)` and local Node APIs. Within five seconds it must return:
 
 ```js
 const fs = await import('node:fs/promises')

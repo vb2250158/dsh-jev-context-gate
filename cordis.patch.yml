@@ -1,4 +1,4 @@
 - insert:
     - id: dsh-jev-context-gate
       name: dsh-jev-context-gate
-      inject: [settings, llm]
+      inject: [settings, llm, skills]

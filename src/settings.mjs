@@ -14,12 +14,18 @@ export const defaultRules = Object.freeze([
       { id: 'failed', label: '有失败', action: { type: 'append-reminder', text: '提出原因或完成结论前，对照本轮实际收集的证据。证据不足时，明确说明尚未核实；只要存在已获授权的下一步，就继续调查。' } },
       { id: 'success', label: '全部成功', action: { type: 'none', text: '' } },
     ] },
+  { id: 'skill-trimming', enabled: true, title: 'Skill 裁剪', description: '按当前上下文的相关度，只向主模型提供最相关的 Skill 简介。', phase: 'skill-catalog', input: 'current-context-text', customInput: '',
+    questionSource: 'configured', questionScript: '', question: '与当前上下文最相关的 Skill 有哪些？', threshold: 0,
+    options: [
+      { id: 'selected', label: '入选', action: { type: 'keep-top-skills', text: '10' } },
+      { id: 'other', label: '未入选', action: { type: 'none', text: '' } },
+    ] },
 ]);
 export const DEFAULT_SETTINGS = { enabled: false, provider: '', model: '', nativeJev: true, beforeEnabled: true, afterEnabled: true, maxContextCharacters: 12000, maxCorrections: 2, rules: structuredClone(defaultRules) };
-const actionSchema = z.object({ type: z.union([z.const('none'), z.const('inject-context'), z.const('append-reminder')]).required(), text: z.string().default('') });
+const actionSchema = z.object({ type: z.union([z.const('none'), z.const('inject-context'), z.const('inject-skill'), z.const('append-reminder'), z.const('skip-skill'), z.const('keep-top-skills')]).required(), text: z.string().default('') });
 const optionSchema = z.object({ id: z.string().required(), label: z.string().required(), action: actionSchema.required() });
 const ruleSchema = z.object({
-  id: z.string().required(), enabled: z.boolean().default(true), title: z.string().default(''), description: z.string().default(''), phase: z.union([z.const('before'), z.const('after')]).required(),
+  id: z.string().required(), enabled: z.boolean().default(true), title: z.string().default(''), description: z.string().default(''), phase: z.union([z.const('before'), z.const('after'), z.const('skill-injection'), z.const('skill-catalog')]).required(),
   input: z.string().default(''), customInput: z.string().default(''), questionSource: z.string().default('configured'),
   questionScript: z.string().default(''), question: z.string().default(''), options: z.array(optionSchema).default([]),
   threshold: z.number().min(0).max(1).default(0.8), context: z.string().default(''),
@@ -38,29 +44,34 @@ const normalize = value => {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(rule.id) || ids.has(rule.id)) throw new TypeError('Invalid or duplicate rule id');
     ids.add(rule.id);
     const legacy = rule.options.length === 0;
-    const input = rule.input || (rule.phase === 'before' ? 'latest-user-message' : 'tool-results');
+    const input = rule.input || (rule.phase === 'after' ? 'tool-results' : rule.phase === 'skill-injection' ? 'skill-summary' : 'latest-user-message');
     const question = legacy && rule.phase === 'after' ? '本轮工具结果是否包含失败？' : rule.question;
     const options = legacy ? (rule.phase === 'before'
       ? [{ id: 'yes', label: '是', action: { type: 'inject-context', text: rule.context } }, { id: 'no', label: '否', action: { type: 'none', text: '' } }]
       : [{ id: 'failed', label: '有失败', action: { type: 'append-reminder', text: rule.context } }, { id: 'success', label: '全部成功', action: { type: 'none', text: '' } }]) : rule.options;
-    if (!['before', 'after'].includes(rule.phase) || (rule.phase === 'before'
-      ? !['latest-user-message', 'current-context-text', 'custom-text'].includes(input)
-      : !['tool-results', 'custom-text'].includes(input))
+    if (!['before', 'after', 'skill-injection', 'skill-catalog'].includes(rule.phase) || (rule.phase === 'before'
+      ? !['latest-user-message', 'current-context-text', 'user-message-with-skills', 'custom-text'].includes(input)
+      : rule.phase === 'after' ? !['tool-results', 'custom-text'].includes(input)
+        : rule.phase === 'skill-injection' ? !['skill-summary', 'skill-content', 'latest-user-message', 'current-context-text', 'custom-text'].includes(input)
+          : !['current-context-text', 'latest-user-message', 'custom-text'].includes(input))
       || rule.title.length > 120 || rule.description.length > 500 || rule.customInput.length > 24000 || rule.questionScript.length > 16000 || question.length > 8000
       || !['configured', 'script'].includes(rule.questionSource)
       || (rule.questionSource === 'configured' && !question.trim())
       || (rule.questionSource === 'script' && !rule.questionScript.trim())
       || (input === 'custom-text' && !rule.customInput.trim())
-      || options.length < 2 || options.length > 16
-      || (rule.phase === 'after' && (options.length !== 2 || options[0].id !== 'failed' || options[1].id !== 'success'))) throw new TypeError('Invalid rule');
+      || options.length < 2 || options.length > 16) throw new TypeError('Invalid rule');
+    if (rule.phase === 'skill-catalog' && (options.length !== 2 || options[0].action?.type !== 'keep-top-skills' || options[1].action?.type !== 'none'
+      || !/^[1-9][0-9]*$/.test(options[0].action.text) || Number(options[0].action.text) > 50)) throw new TypeError('Invalid Skill catalog action');
     const optionIds = new Set(), labels = new Set();
     for (const option of options) {
       if (!/^[a-z][a-z0-9-]{0,63}$/.test(option.id) || optionIds.has(option.id)
         || !option.label.trim() || option.label.length > 800 || labels.has(option.label.trim())
-        || !(rule.phase === 'before' ? ['none', 'inject-context'] : ['none', 'append-reminder']).includes(option.action.type)
-        || option.action.text.length > 8000 || (option.action.type !== 'none' && !option.action.text.trim())) throw new TypeError('Invalid option');
+        || !(rule.phase === 'before' ? ['none', 'inject-context', 'inject-skill'] : rule.phase === 'after' ? ['none', 'append-reminder'] : rule.phase === 'skill-injection' ? ['none', 'skip-skill', 'inject-context'] : ['none', 'keep-top-skills']).includes(option.action.type)
+        || option.action.text.length > 8000 || (!['none', 'skip-skill'].includes(option.action.type) && !option.action.text.trim())
+        || (option.action.type === 'inject-skill' && (option.action.text.length > 120 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(option.action.text)))) throw new TypeError('Invalid option');
       optionIds.add(option.id); labels.add(option.label.trim());
     }
+    if (input === 'user-message-with-skills' && !options.some(option => option.action.type === 'inject-skill')) throw new TypeError('Skill-aware input requires a skill action');
     return { id: rule.id, enabled: rule.enabled, title: rule.title, description: rule.description, phase: rule.phase, input, customInput: rule.customInput,
       questionSource: rule.questionSource, questionScript: rule.questionScript, question, options, threshold: rule.threshold };
   });

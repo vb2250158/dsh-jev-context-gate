@@ -6,7 +6,7 @@ export async function judge({ settings, phase, text, inputs, preparedRules, sign
   if (!settings.provider || !settings.model) throw new Error('Jev judgement model is not configured');
   if (modeForModel(settings.model) === 'jev-native') throw new Error('Native Jev model requires a structured provider adapter');
   const rules = validateRules(preparedRules ?? settings.rules).filter(rule => rule.enabled && rule.phase === phase && (inputs ? Boolean(inputs[rule.id]) : true));
-  if (!['before', 'after'].includes(phase)) throw new Error('Invalid judgement phase');
+  if (!['before', 'after', 'skill-injection'].includes(phase)) throw new Error('Invalid judgement phase');
   const items = rules.map(rule => ({
     id: rule.id, input: inputs ? inputs[rule.id] : text, title: rule.question,
     options: Object.fromEntries(rule.options.map(option => [option.id, option.label])),
