@@ -4,6 +4,12 @@ English | [简体中文](README.md)
 
 Jev rules for DSH. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Model IDs starting with `jev-` are labeled native; structured native calls still require a provider adapter.
 
+## 0.1.16
+
+The rule editor now exposes the top count directly. Change Skill trimming from 10 to 5 there. Candidate scoring uses one model request per batch of up to 100 items, with a finalist pass for larger sets; it does not send a separate request for each Skill. The relevance threshold applies even when the candidate count is below the top count.
+
+For a custom list, add a rule for the user-message event, choose custom candidate filtering, enter one item per line, and configure the judgement input, question, threshold, and top count. Selected items enter the current conversation. A candidate script can instead return strings or `{ id, text }` entries and may read local files. Lists contain 2–500 items, at most 64000 characters in total; the top count is 1–50.
+
 ## 0.1.15
 
 The rule list shows each configured title and description without generated rule numbers or extra summary tags. Edit opens a separate dialog for the event, input, question, and option actions. Save persists the changes; Cancel discards edits made in that dialog. If an older rule has no title, its description names the list item; if both are empty, it appears as an unnamed rule.

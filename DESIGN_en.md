@@ -4,6 +4,8 @@ English | [简体中文](DESIGN.md)
 
 ## Data and execution
 
+Candidate selection shares one scorer across Skill catalog entries and user configured lists. A before rule may read one candidate per line or run a trusted script returning strings or `{ id, text }` records. The saved input, question, threshold, and top count control scoring; selected custom entries enter a plugin context message. The Skill catalog action instead replaces the host catalog entries and text. Scoring uses batches of at most 100 entries with finalist rounds for larger sets, and always applies the threshold even when the list contains fewer entries than the top count.
+
 DSH settings owns saved rules. A rule stores a stable ID, enabled state, editable rule title and description, event, input source, optional fixed input, question source, question title or script, probability threshold, and 2–16 options with stable IDs, labels, and actions. Existing `phase/question/context/threshold` rules migrate when settings are read. Legacy `beforeEnabled/afterEnabled` fields remain readable; enabled rules control runtime.
 
 The `before` event reads the latest user text or text visible at `agent/pre-step` and appends the selected option's context before the main model request. The `after` event reads host tool-result IDs, failure status, and text at `llm/stream`; it buffers the original stream and appends the selected reminder before `finish`. It cannot retract content already displayed. Fixed custom input is used verbatim when its event occurs.

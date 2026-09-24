@@ -13,6 +13,13 @@ export function validateRules(rules) {
     const description = rule.description ?? '';
     if (typeof description !== 'string' || description.length > 500) throw new TypeError('Invalid rule description');
     const input = rule.input || (rule.phase === 'after' ? 'tool-results' : rule.phase === 'skill-injection' ? 'skill-summary' : 'latest-user-message');
+    const candidateSource = rule.phase === 'skill-catalog' ? 'skill-catalog' : rule.candidateSource ?? 'none';
+    const candidateText = rule.candidateText ?? '';
+    const candidateScript = rule.candidateScript ?? '';
+    if (!(rule.phase === 'skill-catalog' ? candidateSource === 'skill-catalog' : rule.phase === 'before' ? ['none', 'custom-list', 'script'].includes(candidateSource) : candidateSource === 'none')
+      || typeof candidateText !== 'string' || candidateText.length > 64000 || typeof candidateScript !== 'string' || candidateScript.length > 16000
+      || (candidateSource === 'custom-list' && candidateText.split(/\r?\n/).filter(item => item.trim()).length < 2)
+      || (candidateSource === 'script' && !candidateScript.trim())) throw new TypeError('Invalid candidate source');
     if (rule.phase === 'before' ? !['latest-user-message', 'current-context-text', 'user-message-with-skills', 'custom-text'].includes(input)
       : rule.phase === 'after' ? !['tool-results', 'custom-text'].includes(input)
         : rule.phase === 'skill-injection' ? !['skill-summary', 'skill-content', 'latest-user-message', 'current-context-text', 'custom-text'].includes(input)
@@ -31,7 +38,7 @@ export function validateRules(rules) {
         ? [{ id: 'yes', label: '是', action: { type: 'inject-context', text: rule.context } }, { id: 'no', label: '否', action: { type: 'none', text: '' } }]
         : [{ id: 'failed', label: '有失败', action: { type: 'append-reminder', text: rule.context } }, { id: 'success', label: '全部成功', action: { type: 'none', text: '' } }];
     if (options.length < 2 || options.length > 16) throw new TypeError('Invalid options');
-    if (rule.phase === 'skill-catalog' && (options.length !== 2 || options[0].action?.type !== 'keep-top-skills' || options[1].action?.type !== 'none'
+    if (candidateSource !== 'none' && (options.length !== 2 || options[0].action?.type !== (candidateSource === 'skill-catalog' ? 'keep-top-skills' : 'inject-selected-candidates') || options[1].action?.type !== 'none'
       || !/^[1-9][0-9]*$/.test(options[0].action.text) || Number(options[0].action.text) > 50)) throw new TypeError('Invalid Skill catalog action');
     const optionIds = new Set(), labels = new Set();
     const validOptions = options.map(option => {
@@ -39,13 +46,13 @@ export function validateRules(rules) {
         || typeof option.label !== 'string' || !option.label.trim() || option.label.length > 800 || labels.has(option.label.trim())) throw new TypeError('Invalid option');
       optionIds.add(option.id); labels.add(option.label.trim());
       const action = option.action;
-      const validTypes = rule.phase === 'before' ? ['none', 'inject-context', 'inject-skill'] : rule.phase === 'after' ? ['none', 'append-reminder'] : rule.phase === 'skill-injection' ? ['none', 'skip-skill', 'inject-context'] : ['none', 'keep-top-skills'];
+      const validTypes = rule.phase === 'before' ? candidateSource === 'none' ? ['none', 'inject-context', 'inject-skill'] : ['none', 'inject-selected-candidates'] : rule.phase === 'after' ? ['none', 'append-reminder'] : rule.phase === 'skill-injection' ? ['none', 'skip-skill', 'inject-context'] : ['none', 'keep-top-skills'];
       if (!action || !validTypes.includes(action.type) || typeof action.text !== 'string' || action.text.length > 8000 || (!['none', 'skip-skill'].includes(action.type) && !action.text.trim())
         || (action.type === 'inject-skill' && (action.text.length > 120 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(action.text)))) throw new TypeError('Invalid option action');
       return { id: option.id, label: option.label, action: { type: action.type, text: ['none', 'skip-skill'].includes(action.type) ? '' : action.text } };
     });
     if (input === 'user-message-with-skills' && !validOptions.some(option => option.action.type === 'inject-skill')) throw new TypeError('Skill-aware input requires a skill action');
-    return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, input, customInput, questionSource, questionScript, question, options: validOptions, threshold: rule.threshold };
+    return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, input, customInput, candidateSource, candidateText, candidateScript, questionSource, questionScript, question, options: validOptions, threshold: rule.threshold };
   });
 }
 
@@ -57,7 +64,7 @@ export function evaluatePolicy({ rules, phase, verdicts, maxCharacters = 12000 }
   const decisions = [], chunks = [], skillRequests = [];
   let skipSkill = false;
   let length = 0;
-  for (const rule of valid.filter(row => row.enabled && row.phase === phase)) {
+  for (const rule of valid.filter(row => row.enabled && row.phase === phase && row.candidateSource === 'none')) {
     const scores = verdicts?.[rule.id]?.probabilities;
     if (!scores || typeof scores !== 'object' || Array.isArray(scores) || Object.keys(scores).length !== rule.options.length
       || rule.options.some(option => !Object.hasOwn(scores, option.id) || !Number.isFinite(scores[option.id]) || scores[option.id] < 0 || scores[option.id] > 1)) {

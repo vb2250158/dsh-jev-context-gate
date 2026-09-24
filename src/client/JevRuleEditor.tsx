@@ -2,10 +2,11 @@ import * as React from 'react'
 import { Button, Input, Menu, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import styles from './JevSettingsSection.module.css'
 
-export type Action = { type: 'none' | 'inject-context' | 'inject-skill' | 'append-reminder' | 'skip-skill' | 'keep-top-skills'; text: string }
+export type Action = { type: 'none' | 'inject-context' | 'inject-skill' | 'append-reminder' | 'skip-skill' | 'keep-top-skills' | 'inject-selected-candidates'; text: string }
 export type RuleOption = { id: string; label: string; action: Action }
 export type Rule = {
   id: string; enabled: boolean; title: string; description: string; phase: 'before' | 'after' | 'skill-injection' | 'skill-catalog'; input: string; customInput: string
+  candidateSource: 'none' | 'skill-catalog' | 'custom-list' | 'script'; candidateText: string; candidateScript: string
   questionSource: 'configured' | 'script'; questionScript: string; question: string
   options: RuleOption[]; threshold: number
 }
@@ -22,7 +23,7 @@ const inputNames: Record<string, string> = {
   'custom-text': '自定义文字',
 }
 const actionNames: Record<Action['type'], string> = {
-  none: '不执行动作', 'inject-context': '补充主会话上下文', 'inject-skill': '注入 Skill 正文', 'append-reminder': '在答复末尾追加提醒', 'skip-skill': '跳过此次 Skill 注入', 'keep-top-skills': '保留最相关的 Skill',
+  none: '不执行动作', 'inject-context': '补充主会话上下文', 'inject-skill': '注入 Skill 正文', 'append-reminder': '在答复末尾追加提醒', 'skip-skill': '跳过此次 Skill 注入', 'keep-top-skills': '保留最相关的 Skill', 'inject-selected-candidates': '注入入选内容',
 }
 
 function Choice({ label, value, choices, disabled, onSelect }: {
@@ -47,27 +48,39 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
     set({ options: rule.options.map(option => option.id === id ? { ...option, ...changes } : option) })
   const changeEvent = (value: string): void => {
     if (value !== 'before' && value !== 'after' && value !== 'skill-injection' && value !== 'skill-catalog') return
-    if (value === 'before') set({ phase: value, input: 'latest-user-message', question: '', thresholdPercent: '80',
+    if (value === 'before') set({ phase: value, candidateSource: 'none', input: 'latest-user-message', question: '', thresholdPercent: '80',
       options: [
         { id: 'option-a', label: '', action: { type: 'none', text: '' } },
         { id: 'option-b', label: '', action: { type: 'none', text: '' } },
       ] })
-    else if (value === 'after') set({ phase: value, input: 'tool-results', question: '', thresholdPercent: '80',
+    else if (value === 'after') set({ phase: value, candidateSource: 'none', input: 'tool-results', question: '', thresholdPercent: '80',
       options: [
         { id: 'option-a', label: '', action: { type: 'none', text: '' } },
         { id: 'option-b', label: '', action: { type: 'none', text: '' } },
       ] })
-    else if (value === 'skill-injection') set({ phase: value, input: 'skill-summary', question: '', thresholdPercent: '80',
+    else if (value === 'skill-injection') set({ phase: value, candidateSource: 'none', input: 'skill-summary', question: '', thresholdPercent: '80',
       options: [
         { id: 'option-a', label: '', action: { type: 'none', text: '' } },
         { id: 'option-b', label: '', action: { type: 'none', text: '' } },
       ] })
-    else set({ phase: value, title: rule.title || 'Skill 裁剪', input: 'current-context-text', question: '与当前上下文最相关的 Skill 有哪些？', thresholdPercent: '0',
+    else set({ phase: value, candidateSource: 'skill-catalog', title: rule.title || 'Skill 裁剪', input: 'current-context-text', question: '与当前上下文最相关的 Skill 有哪些？', thresholdPercent: '0',
       options: [
         { id: 'selected', label: '入选', action: { type: 'keep-top-skills', text: '10' } },
         { id: 'other', label: '未入选', action: { type: 'none', text: '' } },
       ] })
   }
+  const changeCandidateSource = (value: string): void => {
+    if (!['none', 'custom-list', 'script'].includes(value)) return
+    if (value === 'none') set({ candidateSource: 'none', question: '', thresholdPercent: '80', options: [
+      { id: 'option-a', label: '', action: { type: 'none', text: '' } },
+      { id: 'option-b', label: '', action: { type: 'none', text: '' } },
+    ] })
+    else set({ candidateSource: value as Rule['candidateSource'], input: 'current-context-text', question: '哪些候选内容与当前上下文最相关？', thresholdPercent: '0', options: [
+      { id: 'selected', label: '入选', action: { type: 'inject-selected-candidates', text: '10' } },
+      { id: 'other', label: '未入选', action: { type: 'none', text: '' } },
+    ] })
+  }
+  const ranking = rule.candidateSource !== 'none'
   const sourceDescription = rule.input === 'custom-text'
     ? '使用下方输入的固定文字；每次事件发生都会读取它。'
     : rule.input === 'user-message-with-skills'
@@ -105,7 +118,7 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
         <div className={styles.contextFields}>
           <Choice label="事件" value={rule.phase} disabled={!writable} choices={[{ id: 'before', label: eventNames.before }, { id: 'skill-catalog', label: eventNames['skill-catalog'] }, { id: 'skill-injection', label: eventNames['skill-injection'] }, { id: 'after', label: eventNames.after }]} onSelect={changeEvent} />
           <Choice label="待判断内容" value={rule.input} disabled={!writable} choices={rule.phase === 'before'
-            ? [{ id: 'latest-user-message', label: inputNames['latest-user-message'] }, { id: 'current-context-text', label: inputNames['current-context-text'] }, { id: 'user-message-with-skills', label: inputNames['user-message-with-skills'] }, { id: 'custom-text', label: inputNames['custom-text'] }]
+            ? [{ id: 'latest-user-message', label: inputNames['latest-user-message'] }, { id: 'current-context-text', label: inputNames['current-context-text'] }, ...(ranking ? [] : [{ id: 'user-message-with-skills', label: inputNames['user-message-with-skills'] }]), { id: 'custom-text', label: inputNames['custom-text'] }]
             : rule.phase === 'after' ? [{ id: 'tool-results', label: inputNames['tool-results'] }, { id: 'custom-text', label: inputNames['custom-text'] }]
               : rule.phase === 'skill-catalog' ? [{ id: 'current-context-text', label: inputNames['current-context-text'] }, { id: 'latest-user-message', label: inputNames['latest-user-message'] }, { id: 'custom-text', label: inputNames['custom-text'] }]
                 : [{ id: 'skill-summary', label: inputNames['skill-summary'] }, { id: 'skill-content', label: inputNames['skill-content'] }, { id: 'latest-user-message', label: inputNames['latest-user-message'] }, { id: 'current-context-text', label: inputNames['current-context-text'] }, { id: 'custom-text', label: inputNames['custom-text'] }]} onSelect={input => set({ input })} />
@@ -113,30 +126,37 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
         <details className={styles.helpDetails}><summary>待判断内容说明</summary><p>{sourceDescription}</p></details>
         {rule.input === 'custom-text' && <label className={styles.field}>自定义待判断内容<textarea className={styles.textarea} value={rule.customInput} maxLength={24000} disabled={!writable} rows={3} placeholder="输入每次事件发生时供判定的固定内容" onChange={event => set({ customInput: event.currentTarget.value })} /></label>}
       </div>
+      {rule.phase === 'before' && <div className={styles.ruleStage}>
+        <Choice label="判定方式" value={rule.candidateSource} disabled={!writable} choices={[{ id: 'none', label: '普通选择题' }, { id: 'custom-list', label: '筛选自定义候选' }, { id: 'script', label: '筛选脚本候选' }]} onSelect={changeCandidateSource} />
+        {rule.candidateSource === 'custom-list' && <label className={styles.field}>候选内容（每行一条）<textarea className={styles.codeArea} value={rule.candidateText} maxLength={64000} disabled={!writable} rows={7} placeholder="注意事项一\n注意事项二\n注意事项三" onChange={event => set({ candidateText: event.currentTarget.value })} /></label>}
+        {rule.candidateSource === 'script' && <><label className={styles.field}>候选生成脚本<textarea className={styles.codeArea} value={rule.candidateScript} maxLength={16000} disabled={!writable} rows={7} spellCheck={false} placeholder={"const fs = await import('node:fs/promises')\nreturn (await fs.readFile('C:/rules/notes.txt', 'utf8')).split('\\n').filter(Boolean)"} onChange={event => set({ candidateScript: event.currentTarget.value })} /></label>
+          <details className={styles.helpDetails}><summary>脚本接口说明</summary><p>脚本接收 <code>event</code> 和 <code>input</code>，返回文字数组，或 <code>{'[{ id, text }]'}</code>。可读取本机文件；每次事件发生时重新执行。</p></details></>}
+      </div>}
       <div className={styles.ruleStage}><div className={styles.stageHeading}><strong>题目</strong></div>
         <div className={styles.questionControls}>
           <Choice label="生成方式" value={rule.questionSource} disabled={!writable} choices={[{ id: 'configured', label: '直接配置' }, { id: 'script', label: '自定义脚本' }]} onSelect={value => set({ questionSource: value as DraftRule['questionSource'] })} />
-          <label className={styles.field}>{rule.phase === 'skill-catalog' ? '最低相关度（%）' : '执行阈值（%）'}<Input type="number" min="0" max="100" step="1" value={rule.thresholdPercent} disabled={!writable} onChange={event => set({ thresholdPercent: event.currentTarget.value })} /></label>
+          <label className={styles.field}>{ranking ? '最低相关度（%）' : '执行阈值（%）'}<Input type="number" min="0" max="100" step="1" value={rule.thresholdPercent} disabled={!writable} onChange={event => set({ thresholdPercent: event.currentTarget.value })} /></label>
         </div>
+        {ranking && <label className={styles.field}>最多保留多少条<Input type="number" min="1" max="50" step="1" value={rule.options[0]?.action.text ?? ''} disabled={!writable} onChange={event => updateOption(rule.options[0].id, { action: { ...rule.options[0].action, text: event.currentTarget.value } })} /></label>}
         {rule.questionSource === 'configured' ? <label className={styles.field}>题目标题<Input value={rule.question} maxLength={8000} disabled={!writable} placeholder="例如：这条消息是否需要先检查证据？" onChange={event => set({ question: event.currentTarget.value })} /></label>
           : <><label className={styles.field}>题目生成脚本<textarea className={styles.codeArea} value={rule.questionScript} maxLength={16000} disabled={!writable} rows={7} spellCheck={false} placeholder={"// 可使用 event、input、options；支持 await import('node:fs/promises')\nreturn { title: '这条消息是否需要检查证据？', options }"} onChange={event => set({ questionScript: event.currentTarget.value })} /></label>
             <details className={styles.helpDetails}><summary>脚本接口说明</summary><p>脚本在本机工作线程执行，可读取文件。返回 <code>{'{ title, options: [{ id, label }] }'}</code>；选项 ID 与下方一致。行为仍由规则配置决定。</p></details></>}
       </div>
-      <div className={styles.ruleStage}><div className={styles.stageHeading}><strong>选项与行为</strong><span>{rule.phase === 'skill-catalog' ? '运行时生成' : `${rule.options.length} 个选项`}</span></div>
-        {rule.phase === 'skill-catalog' && <p className={styles.actionPreview}>候选选项从当前可用 Skill 的名称和简介生成。判定模型分别给出相关度，再按下方数量保留最高分的 Skill。</p>}
+      <div className={styles.ruleStage}><div className={styles.stageHeading}><strong>选项与行为</strong><span>{ranking ? '运行时生成' : `${rule.options.length} 个选项`}</span></div>
+        {ranking && <p className={styles.actionPreview}>一道题会对每条候选内容评分，按相关度和上方数量裁剪。{rule.candidateSource === 'skill-catalog' ? '入选的 Skill 简介替换原目录。' : '入选内容会注入当前会话。'}</p>}
         <div className={styles.ruleOptions}>{rule.options.map((option, optionIndex) => <div className={styles.ruleOption} key={option.id}>
           <div className={styles.optionTitle}><span className={styles.optionLetter}>{String.fromCharCode(65 + optionIndex)}</span><label className={styles.field}>选项文案<Input value={option.label} maxLength={800} disabled={!writable} aria-label={`${displayTitle}，选项 ${optionIndex + 1}`} onChange={event => updateOption(option.id, { label: event.currentTarget.value })} /></label>
-            {rule.phase !== 'skill-catalog' && <Button variant="ghost" size="sm" disabled={!writable || rule.options.length <= 2} onClick={() => set({ options: rule.options.filter(item => item.id !== option.id) })}>移除</Button>}</div>
+            {!ranking && <Button variant="ghost" size="sm" disabled={!writable || rule.options.length <= 2} onClick={() => set({ options: rule.options.filter(item => item.id !== option.id) })}>移除</Button>}</div>
           <div className={styles.optionActionControls}>
-            <Choice label="命中后" value={option.action.type} disabled={!writable} choices={rule.phase === 'before'
+            {ranking ? <span className={styles.actionPreview}>{option.action.type === 'none' ? '不执行动作' : rule.candidateSource === 'skill-catalog' ? '替换 Skill 目录' : '注入入选内容'}</span> : <Choice label="命中后" value={option.action.type} disabled={!writable} choices={rule.phase === 'before'
               ? [{ id: 'none', label: actionNames.none }, { id: 'inject-context', label: actionNames['inject-context'] }, { id: 'inject-skill', label: actionNames['inject-skill'] }]
               : rule.phase === 'after' ? [{ id: 'none', label: actionNames.none }, { id: 'append-reminder', label: actionNames['append-reminder'] }]
                 : rule.phase === 'skill-catalog' ? [{ id: 'none', label: actionNames.none }, { id: 'keep-top-skills', label: actionNames['keep-top-skills'] }]
                   : [{ id: 'none', label: '继续注入' }, { id: 'skip-skill', label: actionNames['skip-skill'] }, { id: 'inject-context', label: actionNames['inject-context'] }]}
-              onSelect={type => { updateOption(option.id, { action: { type: type as Action['type'], text: type === option.action.type ? option.action.text : '' } }); if (!['none', 'skip-skill'].includes(type)) setExpandedActionId(option.id) }} />
-            {!['none', 'skip-skill'].includes(option.action.type) && <Button variant="outline" size="sm" aria-expanded={expandedActionId === option.id} aria-controls={`jev-action-${rule.id}-${option.id}`} onClick={() => setExpandedActionId(current => current === option.id ? null : option.id)}>{expandedActionId === option.id ? '收起内容' : option.action.text.trim() ? '编辑内容' : '填写内容'}</Button>}
+              onSelect={type => { updateOption(option.id, { action: { type: type as Action['type'], text: type === option.action.type ? option.action.text : '' } }); if (!['none', 'skip-skill'].includes(type)) setExpandedActionId(option.id) }} />}
+            {!ranking && !['none', 'skip-skill'].includes(option.action.type) && <Button variant="outline" size="sm" aria-expanded={expandedActionId === option.id} aria-controls={`jev-action-${rule.id}-${option.id}`} onClick={() => setExpandedActionId(current => current === option.id ? null : option.id)}>{expandedActionId === option.id ? '收起内容' : option.action.text.trim() ? '编辑内容' : '填写内容'}</Button>}
           </div>
-          {!['none', 'skip-skill'].includes(option.action.type) && (expandedActionId === option.id
+          {!ranking && !['none', 'skip-skill'].includes(option.action.type) && (expandedActionId === option.id
             ? <label className={styles.field} id={`jev-action-${rule.id}-${option.id}`}>{option.action.type === 'inject-skill' ? 'Skill 名称' : '动作内容'}{option.action.type === 'inject-skill'
               ? <Input value={option.action.text} maxLength={120} disabled={!writable} placeholder="输入可用的 Skill 名称，例如 code-review" onChange={event => updateOption(option.id, { action: { ...option.action, text: event.currentTarget.value } })} />
               : option.action.type === 'keep-top-skills'
@@ -144,7 +164,7 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
               : <textarea className={styles.textarea} value={option.action.text} maxLength={8000} disabled={!writable} rows={3} placeholder="选中此选项时使用的文字" onChange={event => updateOption(option.id, { action: { ...option.action, text: event.currentTarget.value } })} />}</label>
             : <p className={styles.actionPreview}>{option.action.text.trim() || '尚未填写动作内容'}</p>)}
         </div>)}</div>
-        {rule.phase !== 'skill-catalog' && <Button variant="outline" size="sm" disabled={!writable || rule.options.length >= 16} onClick={() => set({ options: [...rule.options, { id: `option-${crypto.randomUUID().replaceAll('-', '')}`, label: '', action: { type: 'none', text: '' } }] })}>添加选项</Button>}
+        {!ranking && <Button variant="outline" size="sm" disabled={!writable || rule.options.length >= 16} onClick={() => set({ options: [...rule.options, { id: `option-${crypto.randomUUID().replaceAll('-', '')}`, label: '', action: { type: 'none', text: '' } }] })}>添加选项</Button>}
       </div>
       <div className={styles.ruleFooter}><Button variant="ghost" size="sm" disabled={!writable} onClick={remove}>删除规则</Button></div>
       {error && <p className={styles.error} role="alert">{error}</p>}

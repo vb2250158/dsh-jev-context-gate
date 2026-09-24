@@ -26,8 +26,10 @@ function validateDraft(rules: DraftRule[]): Rule[] {
     if (rule.questionSource === 'script' && !rule.questionScript.trim()) throw new Error(`${label}缺少题目生成脚本。`)
     if (rule.input === 'custom-text' && !rule.customInput.trim()) throw new Error(`${label}缺少自定义待判断内容。`)
     if (rule.input === 'user-message-with-skills' && !rule.options.some(option => option.action.type === 'inject-skill')) throw new Error(`${label}需要至少一个注入 Skill 的选项。`)
-    if (rule.phase === 'skill-catalog' && (rule.options.length !== 2 || rule.options[0].action.type !== 'keep-top-skills' || rule.options[1].action.type !== 'none'
-      || !/^[1-9][0-9]*$/.test(rule.options[0].action.text) || Number(rule.options[0].action.text) > 50)) throw new Error(`${label}的 Skill 保留数量应为 1 至 50。`)
+    if (rule.candidateSource === 'custom-list' && rule.candidateText.split(/\r?\n/).filter(item => item.trim()).length < 2) throw new Error(`${label}至少需要两条候选内容。`)
+    if (rule.candidateSource === 'script' && !rule.candidateScript.trim()) throw new Error(`${label}缺少候选生成脚本。`)
+    if (rule.candidateSource !== 'none' && (rule.options.length !== 2 || rule.options[0].action.type !== (rule.candidateSource === 'skill-catalog' ? 'keep-top-skills' : 'inject-selected-candidates') || rule.options[1].action.type !== 'none'
+      || !/^[1-9][0-9]*$/.test(rule.options[0].action.text) || Number(rule.options[0].action.text) > 50)) throw new Error(`${label}的保留数量应为 1 至 50。`)
     if (rule.options.some(option => option.action.type === 'inject-skill' && (option.action.text.length > 120 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(option.action.text)))) throw new Error(`${label}的 Skill 名称应为 120 字以内的小写字母、数字和连字符。`)
     if (rule.options.length < 2 || rule.options.length > 16 || rule.options.some(option => !option.label.trim() || (!['none', 'skip-skill'].includes(option.action.type) && !option.action.text.trim()))) throw new Error(`${label}的选项文案或动作参数不完整。`)
     const threshold = Number(rule.thresholdPercent)
@@ -179,7 +181,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
         <div className={styles.ruleActions}>
           <Button variant="outline" size="sm" disabled={!writable || (draftRules?.length ?? 0) >= 64} onClick={() => {
             const id = `rule-${crypto.randomUUID().replaceAll('-', '')}`
-            setDraftRules(rules => [...(rules ?? []), { id, enabled: true, title: '', description: '', phase: 'before', input: 'latest-user-message', customInput: '',
+            setDraftRules(rules => [...(rules ?? []), { id, enabled: true, title: '', description: '', phase: 'before', input: 'latest-user-message', customInput: '', candidateSource: 'none', candidateText: '', candidateScript: '',
               questionSource: 'configured', questionScript: '', question: '', thresholdPercent: '80',
               options: [{ id: 'yes', label: '是', action: { type: 'inject-context', text: '' } }, { id: 'no', label: '否', action: { type: 'none', text: '' } }] }])
             setEditingRule({ id, baseline: null })

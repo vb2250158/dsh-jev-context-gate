@@ -9,6 +9,7 @@ import { testChoice } from './choice-test.mjs';
 import { createTestHandler } from './test-route.mjs';
 import { resolveSkillRequests } from './skill-injection.mjs';
 import { catalogInput, rankCatalog, pruneCatalogMessage } from './catalog-prune.mjs';
+import { resolveCandidates } from './candidate-source.mjs';
 export { Config, DEFAULT_SETTINGS, SETTINGS_NAMESPACE, SettingsSchema } from './settings.mjs';
 export { evaluatePolicy } from './policy.mjs';
 export const name = 'dsh-jev-context-gate';
@@ -19,7 +20,7 @@ export function apply(ctx, config = {}) {
   const scope = ctx.settings.register(SETTINGS_NAMESPACE, SettingsSchema, { base: { ...DEFAULT_SETTINGS, ...Config(config) } });
   const runRules = async (settings, phase, inputFor, signal) => {
     const rules = [], inputs = {};
-    for (const rule of validateRules(settings.rules).filter(row => row.enabled && row.phase === phase)) {
+    for (const rule of validateRules(settings.rules).filter(row => row.enabled && row.phase === phase && row.candidateSource === 'none')) {
       const input = await inputFor(rule);
       if (!input) continue;
       try {
@@ -51,8 +52,7 @@ export function apply(ctx, config = {}) {
       const catalogIndex = decision.messages.findIndex(message => message.source?.kind === 'skill-catalog');
       if (catalogIndex < 0) break;
       const catalog = decision.messages[catalogIndex];
-      const limit = Number(rule.options[0].action.text);
-      if (catalog.source.entries.length <= limit) continue;
+      if (!catalog.source.entries.length) continue;
       const input = catalogInput(rule, agent, decision.messages, settings.maxContextCharacters);
       if (!input) continue;
       try {
@@ -67,7 +67,28 @@ export function apply(ctx, config = {}) {
         ctx.logger.warn(`Jev Skill catalog rule ${rule.id} failed: ${error instanceof Error ? error.message : 'unknown error'}`);
       }
     }
-    if (!settings.rules.some(rule => rule.enabled && rule.phase === 'before')) return decision;
+    const selectionRules = validateRules(settings.rules).filter(rule => rule.enabled && rule.phase === 'before' && rule.candidateSource !== 'none');
+    for (const rule of selectionRules) {
+      const input = catalogInput(rule, agent, decision.messages, settings.maxContextCharacters);
+      if (!input) continue;
+      try {
+        const prepared = await generateQuestion(rule, input, signal);
+        const candidates = await resolveCandidates(rule, input, signal);
+        const selected = await rankCatalog({ settings, rule: prepared, entries: candidates, input, signal,
+          stream: options => ctx.llm.stream(options), createMessage: contextMessage });
+        if (!selected.length) continue;
+        const text = `[${rule.title || rule.id}]\n${selected.map(entry => `- ${entry.description}`).join('\n')}`;
+        if (text.length > settings.maxContextCharacters) throw new Error('Selected candidate content exceeds context budget');
+        const messages = [...decision.messages];
+        const explicitSkillIndex = messages.findIndex(message => message.source?.kind === 'skill-invocation');
+        messages.splice(explicitSkillIndex < 0 ? messages.length : explicitSkillIndex, 0, contextMessage(text));
+        decision = { ...decision, messages };
+      } catch (error) {
+        signal.throwIfAborted();
+        ctx.logger.warn(`Jev candidate rule ${rule.id} failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+      }
+    }
+    if (!settings.rules.some(rule => rule.enabled && rule.phase === 'before' && (rule.candidateSource ?? 'none') === 'none')) return decision;
     try {
       const needsSkillSummaries = settings.rules.some(rule => rule.enabled && rule.phase === 'before' && rule.input === 'user-message-with-skills');
       let snapshot = { skills: [], complete: true };
