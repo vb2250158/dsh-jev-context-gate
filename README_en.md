@@ -4,6 +4,12 @@ English | [简体中文](README.md)
 
 Jev rules for DSH. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Model IDs starting with `jev-` are labeled native; structured native calls still require a provider adapter.
 
+## 0.1.18
+
+Tool-before and tool-after events can match an exact tool name, a prefix such as `rabiroute_*`, or all tools. A selected before action may deny dispatch. An after action may attach context or send a work-group progress update or question through Rabi.
+
+Two disabled presets, “Work-group progress update” and “Ask work group and wait,” judge Rabi tool outcomes. Configure the exact Route ID, group ID, and role ID before enabling them. The selected action's editable instruction and event facts produce a short message; `rabiroute_agent_send` must confirm a sent channel receipt. The question rule queries new inbound group messages through `rabiroute_manager_api` every ten minutes by default. A quoted reply resumes the original session; an unquoted message is first judged for relevance. The interval and maximum polls are editable. Polling lives in the current DSH process and ends on restart.
+
 ## 0.1.17
 
 Dynamic selection sends all candidates in one model request, requires a 0–1 score for each, then selects the top N, bottom N, scores above N%, or scores below N%. There is no fixed 100-item batch cap; the provider must still accommodate the full input and output. The legacy minimum relevance score remains editable under the additional minimum score control.
@@ -48,7 +54,7 @@ Skill trimming filters summary catalog entries, not full Skill bodies. If rankin
 
 ## Question script
 
-The script body receives `event` (`before`, `skill-catalog`, `skill-injection`, or `after`), `input`, and `options` (`[{ id, label }]`). It can use `await import(...)` and local Node APIs. Within five seconds it must return:
+The script body receives `event` (`before`, `skill-catalog`, `skill-injection`, `after`, `tool-before`, or `tool-after`), `input`, and `options` (`[{ id, label }]`). It can use `await import(...)` and local Node APIs. Within five seconds it must return:
 
 ```js
 const fs = await import('node:fs/promises')

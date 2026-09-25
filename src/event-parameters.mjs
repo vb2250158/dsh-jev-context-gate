@@ -6,6 +6,12 @@ export const EVENT_DEFINITIONS = Object.freeze([
   ] },
   { key: 'skill-injection', display: 'Skill 正文准备注入', parameters: [] },
   { key: 'after', display: '工具返回结果', parameters: [] },
+  { key: 'tool-before', display: '工具调用前', parameters: [
+    { key: 'arguments', display: '工具调用参数', kind: 'input' },
+  ] },
+  { key: 'tool-after', display: '工具调用后', parameters: [
+    { key: 'result', display: '工具返回结果', kind: 'input' },
+  ] },
 ]);
 
 /** List option-bearing parameters declared for an event. */

@@ -5,11 +5,12 @@ import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import styles from './JevSettingsSection.module.css'
 import { modeForModel } from '../mode.mjs'
 import { validateRules } from '../policy.mjs'
+import { groupRulePresets } from '../settings.mjs'
 import { JevTestPage } from './JevTestPage.tsx'
 import { JevRuleEditor } from './JevRuleEditor.tsx'
 import type { DraftRule, Rule } from './JevRuleEditor.tsx'
 
-export type Settings = { enabled: boolean; provider: string; model: string; nativeJev: boolean; beforeEnabled: boolean; afterEnabled: boolean; maxContextCharacters: number; maxCorrections: number; rules: Rule[] }
+export type Settings = { enabled: boolean; provider: string; model: string; nativeJev: boolean; beforeEnabled: boolean; afterEnabled: boolean; maxContextCharacters: number; maxCorrections: number; presetVersion: number; rules: Rule[] }
 type Injected = { scope: SettingsScope<Settings>; loadCatalog: () => Promise<ModelCatalog> }
 export type JevSettingsSectionProps = Partial<Injected> & { close?: () => void }
 
@@ -34,6 +35,8 @@ function validateDraft(rules: DraftRule[]): Rule[] {
       : !rule.selectionValue.trim() || !Number.isFinite(Number(rule.selectionValue)) || Number(rule.selectionValue) < 0 || Number(rule.selectionValue) > 100)) throw new Error(`${label}的筛选目标 N 无效。`)
     if (rule.candidateSource !== 'none' && rule.selectionAction === 'inject-extra' && !rule.selectionActionText.trim()) throw new Error(`${label}缺少额外注入内容。`)
     if (rule.options.some(option => option.action.type === 'inject-skill' && (option.action.text.length > 120 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(option.action.text)))) throw new Error(`${label}的 Skill 名称应为 120 字以内的小写字母、数字和连字符。`)
+    if (rule.phase.startsWith('tool-') && !rule.toolName.trim()) throw new Error(`${label}需要选择监听的工具。`)
+    if (rule.enabled && rule.options.some(option => option.action.type === 'notify-group' || option.action.type === 'ask-group') && (!rule.groupRouteId.trim() || !rule.groupId.trim() || !rule.groupRoleId.trim())) throw new Error(`${label}需要填写 Route ID、群 ID 和人格 ID。`)
     if (rule.candidateSource === 'none' && (rule.options.length < 2 || rule.options.length > 16 || rule.options.some(option => !option.label.trim() || (!['none', 'skip-skill'].includes(option.action.type) && !option.action.text.trim())))) throw new Error(`${label}的选项文案或动作参数不完整。`)
     const threshold = Number(rule.thresholdPercent)
     if (!rule.thresholdPercent.trim() || !Number.isFinite(threshold) || threshold < 0 || threshold > 100) throw new Error(`${label}的阈值应为 0 至 100%。`)
@@ -63,7 +66,16 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
   const [page, setPage] = React.useState<'rules' | 'test'>('rules')
   const savingRef = React.useRef(false)
   const request = React.useRef(0)
+  const migrating = React.useRef(false)
   React.useEffect(() => () => { request.current += 1 }, [])
+  React.useEffect(() => {
+    if (!current || !snapshot.writable || current.presetVersion >= 1 || migrating.current) return
+    migrating.current = true
+    const added = groupRulePresets.filter(rule => !current.rules.some(saved => saved.id === rule.id))
+    void scope.mutate([{ op: 'set', path: ['rules'], value: [...current.rules, ...added] }, { op: 'set', path: ['presetVersion'], value: 1 }])
+      .catch((error: unknown) => setSaveError(error instanceof Error ? error.message : String(error)))
+      .finally(() => { migrating.current = false })
+  }, [current, snapshot.writable, scope])
   const writable = snapshot.writable && snapshot.status === 'ready' && current !== undefined && !saving
   const savedRules = current ? JSON.stringify(current.rules) : null
   const dirty = draftRules !== null && sourceRules !== null && JSON.stringify(draftRules) !== JSON.stringify(toDraft(JSON.parse(sourceRules) as Rule[]))
@@ -184,7 +196,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
         <div className={styles.ruleActions}>
           <Button variant="outline" size="sm" disabled={!writable || (draftRules?.length ?? 0) >= 64} onClick={() => {
             const id = `rule-${crypto.randomUUID().replaceAll('-', '')}`
-            setDraftRules(rules => [...(rules ?? []), { id, enabled: true, title: '', description: '', phase: 'before', input: 'latest-user-message', customInput: '', candidateSource: 'none', candidateText: '', candidateScript: '', candidateParameterKey: '',
+            setDraftRules(rules => [...(rules ?? []), { id, enabled: true, title: '', description: '', phase: 'before', toolName: '', groupRouteId: '', groupId: '', groupRoleId: '', pollMinutes: 10, maxPolls: 432, input: 'latest-user-message', customInput: '', candidateSource: 'none', candidateText: '', candidateScript: '', candidateParameterKey: '',
               splitMode: 'newline', splitText: '', selectionMode: 'top', selectionValue: '10', selectionAction: 'prune', selectionActionText: '',
               questionSource: 'configured', questionScript: '', question: '', thresholdPercent: '80',
               options: [{ id: 'yes', label: '是', action: { type: 'inject-context', text: '' } }, { id: 'no', label: '否', action: { type: 'none', text: '' } }] }])
