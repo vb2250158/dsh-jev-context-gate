@@ -4,7 +4,7 @@ English | [简体中文](README.md)
 
 Jev rules for DSH. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Model IDs starting with `jev-` are labeled native; structured native calls still require a provider adapter.
 
-## 0.1.18
+## 0.1.19
 
 Tool-before and tool-after events can match an exact tool name, a prefix such as `rabiroute_*`, or all tools. A selected before action may deny dispatch. An after action may attach context or send a work-group progress update or question through Rabi.
 
