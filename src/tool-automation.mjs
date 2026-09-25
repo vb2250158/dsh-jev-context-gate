@@ -31,10 +31,13 @@ export function deliveryIdFor(sessionId, callId, ruleId) {
   return `jev-${createHash('sha256').update(JSON.stringify([sessionId, callId, ruleId])).digest('hex').slice(0, 40)}`;
 }
 
+/** Rabi message history timestamps and its from filter use Unix seconds. */
+export const rabiTimeSeconds = milliseconds => Math.floor(milliseconds / 1000);
+
 function checkedBody(result) {
   if (result?.isError || result?.value?.ok !== true) throw new Error(result?.value?.error?.message || 'Rabi tool failed');
   const body = JSON.parse(result.value.body);
-  if (body.code !== 0 || body.ok === false) throw new Error(body.message || 'Rabi request was not accepted');
+  if (body.code !== undefined && body.code !== 0 || body.ok === false) throw new Error(body.message || body.reason || 'Rabi request was not accepted');
   return body;
 }
 
@@ -90,7 +93,7 @@ export async function sendGroupMessage({ ctx, agent, rule, message, deliveryId, 
 
 /** Query only new inbound messages in the configured conversation. */
 export async function readGroupReply({ ctx, agent, rule, since, signal, internalCalls, sentMessageId }) {
-  const path = `/api/roles/${encodeURIComponent(rule.groupRoleId)}/message-endpoint-history?conversationKey=${encodeURIComponent(`napcat:group:${rule.groupId}`)}&from=${since}&limit=100`;
+  const path = `/api/roles/${encodeURIComponent(rule.groupRoleId)}/message-endpoint-history?adapter=napcat&kind=group&target=${encodeURIComponent(rule.groupId)}&from=${since}&limit=100`;
   const body = await callRabi(ctx, agent, 'rabiroute_manager_api', { method: 'GET', path }, signal, internalCalls);
   const entries = body.data?.entries;
   if (!Array.isArray(entries)) throw new Error('Rabi history response has no entries');

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultRules, SettingsSchema } from '../src/settings.mjs';
 import { evaluatePolicy, validateRules } from '../src/policy.mjs';
-import { matchesTool, toolRuleInput, sendGroupMessage, readGroupReply, startGroupPolling, deliveryIdFor } from '../src/tool-automation.mjs';
+import { matchesTool, toolRuleInput, sendGroupMessage, readGroupReply, startGroupPolling, deliveryIdFor, rabiTimeSeconds } from '../src/tool-automation.mjs';
 
 const configured = (id, overrides = {}) => ({ ...defaultRules.find(rule => rule.id === id), enabled: true,
   groupRouteId: 'route-a', groupId: '123', groupRoleId: 'role-a', ...overrides });
@@ -39,7 +39,7 @@ test('group send checks Rabi channel receipt and history query accepts only inbo
   const ctx = { tools: { execute: async request => {
     calls.push(request);
     return { isError: false, value: { ok: true, body: JSON.stringify(request.name === 'rabiroute_agent_send'
-      ? { code: 0, ok: true, status: 'sent', sentMessageId: 'm-1' }
+      ? { ok: true, status: 'sent', sentMessageId: 'm-1' }
       : { code: 0, data: { entries: [{ direction: 'outbound', time: 1001, text: 'bot' }, { direction: 'inbound', time: 1002, text: '答复' }] } }) } };
   } } };
   const agent = { session: { id: 'session-a' } };
@@ -52,11 +52,17 @@ test('group send checks Rabi channel receipt and history query accepts only inbo
   assert.equal(internal.size, 0);
   const reply = await readGroupReply({ ctx, agent, rule, since: 1000, signal: new AbortController().signal, internalCalls: internal });
   assert.equal(reply.text, '答复');
-  assert.match(calls[1].arguments.path, /message-endpoint-history/);
+  assert.equal(rabiTimeSeconds(1_600_000_000_900), 1_600_000_000);
+  const historyUrl = new URL(calls[1].arguments.path, 'http://local');
+  assert.equal(historyUrl.searchParams.get('from'), '1000');
+  assert.equal(historyUrl.searchParams.get('adapter'), 'napcat');
+  assert.equal(historyUrl.searchParams.get('kind'), 'group');
+  assert.equal(historyUrl.searchParams.get('target'), '123');
+  assert.equal(historyUrl.searchParams.has('conversationKey'), false);
 });
 
 test('manager HTTP success without a sent channel receipt does not count as delivery', async () => {
-  const ctx = { tools: { execute: async () => ({ isError: false, value: { ok: true, body: JSON.stringify({ code: 0, ok: true, status: 'queued' }) } }) } };
+  const ctx = { tools: { execute: async () => ({ isError: false, value: { ok: true, body: JSON.stringify({ ok: true, status: 'queued' }) } }) } };
   await assert.rejects(sendGroupMessage({ ctx, agent: { session: { id: 'session-a' } }, rule: configured('rabi-progress'), message: '进度', deliveryId: 'delivery-a', signal: new AbortController().signal }), /did not confirm/);
 });
 
@@ -65,7 +71,7 @@ test('uncertain send reads the same delivery receipt without resending', async (
   const ctx = { tools: { execute: async request => {
     names.push(request.name);
     if (request.name === 'rabiroute_agent_send') throw new Error('timeout');
-    return { isError: false, value: { ok: true, body: JSON.stringify({ code: 0, ok: true, status: 'sent', sentMessageId: 'm-1' }) } };
+    return { isError: false, value: { ok: true, body: JSON.stringify({ ok: true, status: 'sent', sentMessageId: 'm-1' }) } };
   } } };
   const receipt = await sendGroupMessage({ ctx, agent: { session: { id: 'session-a' } }, rule: configured('rabi-progress'), message: '进度', deliveryId: 'delivery-a', signal: new AbortController().signal });
   assert.equal(receipt.sentMessageId, 'm-1');

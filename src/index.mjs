@@ -10,7 +10,7 @@ import { createTestHandler } from './test-route.mjs';
 import { resolveSkillRequests } from './skill-injection.mjs';
 import { catalogInput, rankCatalog, pruneCatalogMessage } from './catalog-prune.mjs';
 import { resolveCandidates } from './candidate-source.mjs';
-import { toolRuleInput, matchesTool, composeGroupMessage, sendGroupMessage, startGroupPolling, deliveryIdFor } from './tool-automation.mjs';
+import { toolRuleInput, matchesTool, composeGroupMessage, sendGroupMessage, startGroupPolling, deliveryIdFor, rabiTimeSeconds } from './tool-automation.mjs';
 export { Config, DEFAULT_SETTINGS, SETTINGS_NAMESPACE, SettingsSchema } from './settings.mjs';
 export { evaluatePolicy } from './policy.mjs';
 export const name = 'dsh-jev-context-gate';
@@ -80,7 +80,7 @@ export function apply(ctx, config = {}) {
         try {
           const eventText = toolRuleInput(rule, exec, toolResult, settings.maxContextCharacters);
           const message = await composeGroupMessage({ ctx, settings, instruction: hit.action.text, eventText, signal: exec.signal, createMessage: contextMessage });
-          const sentAt = Date.now();
+          const sentAt = rabiTimeSeconds(Date.now());
           const receipt = await sendGroupMessage({ ctx, agent: exec.agent, rule, message, deliveryId: deliveryIdFor(exec.agent.session.id, exec.callId, rule.id), signal: exec.signal, internalCalls });
           ctx.logger.info(`Jev ${rule.id} group delivery confirmed: ${receipt.sentMessageId}`);
           if (question) startGroupPolling({ ctx, agent: exec.agent, rule, sentAt, sentMessageId: receipt.sentMessageId, questionText: message, settings, signal: pollController.signal, logger: ctx.logger, internalCalls, createMessage: contextMessage,
