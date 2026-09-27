@@ -4,7 +4,7 @@ import { createCapabilityRegistry } from '../src/capability-registry.mjs';
 import { SettingsSchema, defaultRules } from '../src/settings.mjs';
 import { judge } from '../src/judge.mjs';
 import { dispatchToTool } from '../src/dispatch-adapters.mjs';
-import { selectEventCandidates } from '../src/event-selection.mjs';
+import { applyEventSelection, selectEventCandidates } from '../src/event-selection.mjs';
 
 const messageRule = () => ({ ...defaultRules[0], id: 'custom-message', phase: 'external', eventKey: 'message.received', eventDisplay: '收到消息',
   input: 'event-param', inputParameterKey: 'text', inputParameterDisplay: '消息正文', question: '这条消息需要转发吗？',
@@ -69,4 +69,31 @@ test('external event candidates are selected from an event parameter without mut
   });
   assert.deepEqual(selected, [{ id: 'item-2', text: '事项二' }, { id: 'item-3', text: '事项三' }]);
   assert.equal(original.notices.length, 3);
+});
+
+test('external event selection applies only a configured prune to returned parameters', () => {
+  const original = { notices: ['one', 'two'], text: 'context' };
+  const selected = [{ id: 'item-2', text: 'two' }];
+  const rule = { id: 'pick-notices', candidateParameterKey: 'notices', selectionAction: 'prune' };
+  const pruned = applyEventSelection(original, rule, selected);
+  assert.deepEqual(pruned.parameters.notices, selected);
+  assert.deepEqual(pruned.selection, { ruleId: 'pick-notices', parameterKey: 'notices', selected });
+  assert.deepEqual(original.notices, ['one', 'two']);
+  const injected = applyEventSelection(original, { ...rule, selectionAction: 'inject-extra' }, selected);
+  assert.deepEqual(injected.parameters, original);
+  assert.deepEqual(injected.selection.selected, selected);
+});
+
+test('external event accepts a single candidate for scoring', async () => {
+  const rule = { ...messageRule(), id: 'single-notice', candidateSource: 'event-params', candidateParameterKey: 'notices',
+    selectionMode: 'top', selectionValue: '5', selectionAction: 'prune', threshold: 0, options: [] };
+  const settings = SettingsSchema({ enabled: true, provider: 'mock', model: 'ordinary', rules: [rule] });
+  const selected = await selectEventCandidates({ settings, rule, parameters: { notices: ['one'] }, input: 'context',
+    signal: new AbortController().signal, createMessage: text => ({ content: [{ type: 'text', text }] }),
+    stream: async function* () {
+      yield { type: 'text-delta', text: JSON.stringify({ scores: { 'item-1': 0.9 } }) };
+      yield { type: 'finish', reason: { kind: 'stop' } };
+    },
+  });
+  assert.deepEqual(selected, [{ id: 'item-1', text: 'one' }]);
 });

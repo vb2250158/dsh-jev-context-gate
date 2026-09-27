@@ -32,8 +32,8 @@ export async function resolveCandidates(rule, input, signal) {
 }
 
 /** Normalize candidate arrays supplied by a script, configured text or an event provider. */
-export function normalizeCandidates(value) {
-  if (!Array.isArray(value) || value.length < 2) throw new TypeError('候选项至少需要 2 条。');
+export function normalizeCandidates(value, minimum = 2) {
+  if (!Array.isArray(value) || value.length < minimum) throw new TypeError(`候选项至少需要 ${minimum} 条。`);
   const ids = new Set();
   const entries = value.map((item, index) => {
     const id = typeof item === 'string' ? `item-${index + 1}` : item?.id ?? item?.name;

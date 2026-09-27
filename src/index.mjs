@@ -10,7 +10,7 @@ import { createTestHandler } from './test-route.mjs';
 import { resolveSkillRequests } from './skill-injection.mjs';
 import { catalogInput, rankCatalog, pruneCatalogMessage } from './catalog-prune.mjs';
 import { resolveCandidates } from './candidate-source.mjs';
-import { selectEventCandidates } from './event-selection.mjs';
+import { applyEventSelection, selectEventCandidates } from './event-selection.mjs';
 import { toolRuleInput, matchesTool, composeGroupMessage } from './tool-automation.mjs';
 import { createCapabilityRegistry, actionParameter } from './capability-registry.mjs';
 import { dispatchToTool, dispatchToRabi } from './dispatch-adapters.mjs';
@@ -74,9 +74,9 @@ export function apply(ctx, config = {}) {
       if (!capabilities.event(key)) throw new Error(`Jev event ${key} has no registered source`);
       if (typeof id !== 'string' || !id.trim() || !agent?.session?.id) throw new TypeError('Jev external event needs a stable ID and agent session');
       const settings = scope.get();
-      if (!settings.enabled) return { decisions: [], context: '' };
+      if (!settings.enabled) return { decisions: [], context: '', parameters: { ...parameters }, selections: [] };
       const rules = validateRules(settings.rules).filter(rule => rule.enabled && rule.phase === 'external' && rule.eventKey === key);
-      const updatedParameters = { ...parameters };
+      let updatedParameters = { ...parameters };
       const textFor = rule => rule.input === 'custom-text' ? rule.customInput
         : rule.input === 'event-param' ? (typeof updatedParameters[rule.inputParameterKey] === 'string' ? updatedParameters[rule.inputParameterKey] : JSON.stringify(updatedParameters[rule.inputParameterKey] ?? ''))
           : catalogInput(rule, agent, [], settings.maxContextCharacters);
@@ -93,8 +93,9 @@ export function apply(ctx, config = {}) {
         if (!input) continue;
         const selected = await selectEventCandidates({ settings, rule, parameters: updatedParameters, input, signal,
           stream: options => ctx.llm.stream(options), createMessage: contextMessage });
-        updatedParameters[rule.candidateParameterKey] = selected;
-        selections.push({ ruleId: rule.id, parameterKey: rule.candidateParameterKey, selected: updatedParameters[rule.candidateParameterKey] });
+        const applied = applyEventSelection(updatedParameters, rule, selected);
+        updatedParameters = applied.parameters;
+        selections.push(applied.selection);
         if (rule.selectionAction === 'inject-extra' && selected.length) agent.followup(contextMessage(selectedText(rule, selected.map(entry => ({ description: entry.text })))));
       }
       return { ...result, parameters: updatedParameters, selections };
