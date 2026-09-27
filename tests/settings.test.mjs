@@ -4,7 +4,7 @@ import Schema from '@deepseek-ai/schemastery';
 import { Config, DEFAULT_SETTINGS, SettingsSchema } from '../src/settings.mjs';
 
 test('default rules have option-owned actions and the schema migrates saved legacy rules', () => {
-  assert.deepEqual(Config({}), DEFAULT_SETTINGS);
+  assert.deepEqual(Config({}), SettingsSchema(DEFAULT_SETTINGS));
   assert.match(DEFAULT_SETTINGS.rules[0].options[0].action.text, /源码、配置、日志/);
   const legacy = { id: 'old', enabled: true, phase: 'before', question: '检查吗？', context: '检查', threshold: 0.8 };
   const migrated = SettingsSchema({ rules: [legacy] }).rules[0];
@@ -42,7 +42,7 @@ test('default rules have option-owned actions and the schema migrates saved lega
 
 test('browser rehydrates and validates the serialized settings schema', () => {
   const browserSchema = new Schema(SettingsSchema.toJSON());
-  assert.deepEqual(browserSchema(DEFAULT_SETTINGS), DEFAULT_SETTINGS);
+  assert.deepEqual(browserSchema(DEFAULT_SETTINGS), SettingsSchema(DEFAULT_SETTINGS));
   assert.equal(browserSchema({ rules: [{ ...DEFAULT_SETTINGS.rules[0], description: '浏览器中保存的说明' }] }).rules[0].description, '浏览器中保存的说明');
   assert.equal(browserSchema({ rules: [{ ...DEFAULT_SETTINGS.rules[0], title: '浏览器中保存的标题' }] }).rules[0].title, '浏览器中保存的标题');
   assert.equal(browserSchema({ rules: [{ ...DEFAULT_SETTINGS.rules[0], options: [

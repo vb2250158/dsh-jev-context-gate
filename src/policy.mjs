@@ -1,4 +1,5 @@
 import { optionParametersForEvent } from './event-parameters.mjs';
+import { normalizeAction } from './legacy-action.mjs';
 
 const fixedToolQuestion = '本轮工具结果是否包含失败？';
 
@@ -9,7 +10,10 @@ export function validateRules(rules) {
   return rules.map(rule => {
     if (!rule || typeof rule.id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(rule.id) || ids.has(rule.id)) throw new TypeError('Invalid or duplicate rule id');
     ids.add(rule.id);
-    if (!['before', 'after', 'skill-injection', 'skill-catalog', 'tool-before', 'tool-after'].includes(rule.phase) || typeof rule.enabled !== 'boolean') throw new TypeError('Invalid rule event');
+    if (!['before', 'after', 'skill-injection', 'skill-catalog', 'tool-before', 'tool-after', 'external'].includes(rule.phase) || typeof rule.enabled !== 'boolean') throw new TypeError('Invalid rule event');
+    const eventKey = rule.eventKey ?? '', eventDisplay = rule.eventDisplay ?? '', inputParameterKey = rule.inputParameterKey ?? '', inputParameterDisplay = rule.inputParameterDisplay ?? '';
+    if (rule.phase === 'external' && (!/^[a-z][a-z0-9.-]{0,119}$/.test(eventKey) || typeof eventDisplay !== 'string' || eventDisplay.length > 120 || typeof inputParameterDisplay !== 'string' || inputParameterDisplay.length > 120
+      || (rule.input === 'event-param' && !/^[a-z][a-z0-9.-]{0,119}$/.test(inputParameterKey)))) throw new TypeError('Invalid external event');
     const toolName = rule.toolName ?? '';
     if (typeof toolName !== 'string' || toolName.length > 120 || (rule.phase.startsWith('tool-') && !toolName.trim())) throw new TypeError('Invalid tool name');
     const groupRouteId = rule.groupRouteId ?? '', groupId = rule.groupId ?? '', groupRoleId = rule.groupRoleId ?? '';
@@ -27,14 +31,19 @@ export function validateRules(rules) {
     const candidateText = rule.candidateText ?? '';
     const candidateScript = rule.candidateScript ?? '';
     const candidateParameterKey = rule.candidateParameterKey || (rule.phase === 'skill-catalog' ? 'skills' : '');
-    if (!(rule.phase === 'skill-catalog' ? candidateSource === 'event-params' : rule.phase === 'before' ? ['none', 'custom-list', 'input-split', 'script'].includes(candidateSource) : candidateSource === 'none')
+    const candidateParameterDisplay = rule.candidateParameterDisplay ?? '';
+    if (!(rule.phase === 'skill-catalog' ? candidateSource === 'event-params' : rule.phase === 'before' ? ['none', 'custom-list', 'input-split', 'script'].includes(candidateSource) : rule.phase === 'external' ? ['none', 'event-params'].includes(candidateSource) : candidateSource === 'none')
       || typeof candidateText !== 'string' || candidateText.length > 64000 || typeof candidateScript !== 'string' || candidateScript.length > 16000
+      || typeof candidateParameterDisplay !== 'string' || candidateParameterDisplay.length > 120
       || (candidateSource === 'custom-list' && candidateText.split(/\r?\n/).filter(item => item.trim()).length < 2)
       || (candidateSource === 'script' && !candidateScript.trim())
-      || (candidateSource === 'event-params' && !optionParametersForEvent(rule.phase).some(parameter => parameter.key === candidateParameterKey))) throw new TypeError('Invalid candidate source');
+      || (candidateSource === 'event-params' && (rule.phase === 'external'
+        ? !/^[a-z][a-z0-9.-]{0,119}$/.test(candidateParameterKey)
+        : !optionParametersForEvent(rule.phase).some(parameter => parameter.key === candidateParameterKey)))) throw new TypeError('Invalid candidate source');
     if (rule.phase.startsWith('tool-') ? !['tool-call', 'tool-result', 'current-context-text', 'custom-text'].includes(input)
       : rule.phase === 'before' ? !['latest-user-message', 'current-context-text', 'user-message-with-skills', 'custom-text'].includes(input)
       : rule.phase === 'after' ? !['tool-results', 'custom-text'].includes(input)
+        : rule.phase === 'external' ? !['event-param', 'current-context-text', 'custom-text'].includes(input)
         : rule.phase === 'skill-injection' ? !['skill-summary', 'skill-content', 'latest-user-message', 'current-context-text', 'custom-text'].includes(input)
           : !['current-context-text', 'latest-user-message', 'custom-text'].includes(input)) throw new TypeError('Invalid rule input');
     const customInput = rule.customInput ?? '';
@@ -63,8 +72,8 @@ export function validateRules(rules) {
       if (Array.isArray(rule.options) && rule.options.length > 0 && (rule.options.length !== 2
         || rule.options[0]?.action?.type !== (candidateSource === 'event-params' ? 'keep-top-skills' : 'inject-selected-candidates')
         || rule.options[1]?.action?.type !== 'none')) throw new TypeError('Invalid legacy selection options');
-      return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, toolName, groupRouteId, groupId, groupRoleId, pollMinutes, maxPolls, input, customInput,
-        candidateSource, candidateText, candidateScript, candidateParameterKey, splitMode, splitText, selectionMode, selectionValue, selectionAction, selectionActionText,
+      return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, eventKey, eventDisplay, inputParameterKey, inputParameterDisplay, toolName, input, customInput,
+        candidateSource, candidateText, candidateScript, candidateParameterKey, candidateParameterDisplay, splitMode, splitText, selectionMode, selectionValue, selectionAction, selectionActionText,
         questionSource, questionScript, question, options: [], threshold: rule.threshold };
     }
     const options = Array.isArray(rule.options) && rule.options.length ? rule.options :
@@ -77,16 +86,19 @@ export function validateRules(rules) {
       if (!option || typeof option.id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(option.id) || optionIds.has(option.id)
         || typeof option.label !== 'string' || !option.label.trim() || option.label.length > 800 || labels.has(option.label.trim())) throw new TypeError('Invalid option');
       optionIds.add(option.id); labels.add(option.label.trim());
-      const action = option.action;
-      const validTypes = rule.phase === 'before' ? candidateSource === 'none' ? ['none', 'inject-context', 'inject-skill'] : ['none', 'inject-selected-candidates'] : rule.phase === 'after' ? ['none', 'append-reminder'] : rule.phase === 'tool-before' ? ['none', 'deny-tool'] : rule.phase === 'tool-after' ? ['none', 'inject-context', 'notify-group', 'ask-group'] : rule.phase === 'skill-injection' ? ['none', 'skip-skill', 'inject-context'] : ['none', 'keep-top-skills'];
+      const action = normalizeAction(option.action, rule);
+      const validTypes = rule.phase === 'before' ? candidateSource === 'none' ? ['none', 'inject-context', 'inject-skill'] : ['none', 'inject-selected-candidates'] : rule.phase === 'after' ? ['none', 'append-reminder'] : rule.phase === 'tool-before' ? ['none', 'deny-tool'] : rule.phase === 'tool-after' ? ['none', 'inject-context', 'dispatch'] : rule.phase === 'external' ? ['none', 'inject-context', 'dispatch'] : rule.phase === 'skill-injection' ? ['none', 'skip-skill', 'inject-context'] : ['none', 'keep-top-skills'];
       if (!action || !validTypes.includes(action.type) || typeof action.text !== 'string' || action.text.length > 8000 || (!['none', 'skip-skill'].includes(action.type) && !action.text.trim())
         || (action.type === 'inject-skill' && (action.text.length > 120 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(action.text)))) throw new TypeError('Invalid option action');
-      return { id: option.id, label: option.label, action: { type: action.type, text: ['none', 'skip-skill'].includes(action.type) ? '' : action.text } };
+      const params = action.params ?? [];
+      if (!Array.isArray(params) || params.length > 32 || params.some(parameter => !parameter || typeof parameter.key !== 'string' || !/^[A-Za-z][A-Za-z0-9._-]{0,119}$/.test(parameter.key)
+        || typeof parameter.display !== 'string' || parameter.display.length > 120 || typeof parameter.value !== 'string' || parameter.value.length > 8000)
+        || new Set(params.map(parameter => parameter.key)).size !== params.length
+        || (action.type === 'dispatch' && !params.some(parameter => parameter.key === 'adapter' && parameter.value.trim()))) throw new TypeError('Invalid action parameters');
+      return { id: option.id, label: option.label, action: { type: action.type, text: ['none', 'skip-skill'].includes(action.type) ? '' : action.text, params } };
     });
-    if (rule.enabled && validOptions.some(option => ['notify-group', 'ask-group'].includes(option.action.type))
-      && (!groupRouteId.trim() || !groupId.trim() || !groupRoleId.trim())) throw new TypeError('Group action requires Route ID, group ID and role ID');
     if (input === 'user-message-with-skills' && !validOptions.some(option => option.action.type === 'inject-skill')) throw new TypeError('Skill-aware input requires a skill action');
-    return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, toolName, groupRouteId, groupId, groupRoleId, pollMinutes, maxPolls, input, customInput, candidateSource, candidateText, candidateScript, candidateParameterKey,
+    return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, eventKey, eventDisplay, inputParameterKey, inputParameterDisplay, toolName, input, customInput, candidateSource, candidateText, candidateScript, candidateParameterKey, candidateParameterDisplay,
       splitMode, splitText, selectionMode, selectionValue, selectionAction, selectionActionText,
       questionSource, questionScript, question, options: validOptions, threshold: rule.threshold };
   });
@@ -95,7 +107,7 @@ export function validateRules(rules) {
 /** Select the highest-scored option; only its configured action can affect the session. */
 export function evaluatePolicy({ rules, phase, verdicts, maxCharacters = 12000 }) {
   const valid = validateRules(rules);
-  if (!['before', 'after', 'skill-injection', 'tool-before', 'tool-after'].includes(phase)) throw new TypeError('Invalid phase');
+  if (!['before', 'after', 'skill-injection', 'tool-before', 'tool-after', 'external'].includes(phase)) throw new TypeError('Invalid phase');
   if (!Number.isSafeInteger(maxCharacters) || maxCharacters < 0 || maxCharacters > 64000) throw new TypeError('Invalid context budget');
   const decisions = [], chunks = [], skillRequests = [];
   let skipSkill = false;
@@ -122,7 +134,7 @@ export function evaluatePolicy({ rules, phase, verdicts, maxCharacters = 12000 }
       decisions.push({ ruleId: rule.id, optionId: selected.id, status: 'pending-skill', score });
       continue;
     }
-    if (['deny-tool', 'notify-group', 'ask-group'].includes(selected.action.type)) {
+    if (['deny-tool', 'dispatch'].includes(selected.action.type)) {
       decisions.push({ ruleId: rule.id, optionId: selected.id, action: selected.action, status: 'applied', score });
       continue;
     }

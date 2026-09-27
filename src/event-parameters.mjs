@@ -12,6 +12,7 @@ export const EVENT_DEFINITIONS = Object.freeze([
   { key: 'tool-after', display: '工具调用后', parameters: [
     { key: 'result', display: '工具返回结果', kind: 'input' },
   ] },
+  { key: 'external', display: '扩展事件', parameters: [] },
 ]);
 
 /** List option-bearing parameters declared for an event. */

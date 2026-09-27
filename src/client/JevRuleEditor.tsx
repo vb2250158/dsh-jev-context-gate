@@ -3,12 +3,12 @@ import { Button, Input, Menu, Modal, Switch } from '@deepseek-ai/dsh-client-ui-p
 import { EVENT_DEFINITIONS, optionParametersForEvent } from '../event-parameters.mjs'
 import styles from './JevSettingsSection.module.css'
 
-export type Action = { type: 'none' | 'inject-context' | 'inject-skill' | 'append-reminder' | 'skip-skill' | 'keep-top-skills' | 'inject-selected-candidates' | 'deny-tool' | 'notify-group' | 'ask-group'; text: string }
+export type Action = { type: 'none' | 'inject-context' | 'inject-skill' | 'append-reminder' | 'skip-skill' | 'keep-top-skills' | 'inject-selected-candidates' | 'deny-tool' | 'dispatch'; text: string; params?: { key: string; display: string; value: string }[] }
 export type RuleOption = { id: string; label: string; action: Action }
 export type Rule = {
-  id: string; enabled: boolean; title: string; description: string; phase: 'before' | 'after' | 'skill-injection' | 'skill-catalog' | 'tool-before' | 'tool-after'; input: string; customInput: string
-  toolName: string; groupRouteId: string; groupId: string; groupRoleId: string; pollMinutes: number; maxPolls: number
-  candidateSource: 'none' | 'event-params' | 'custom-list' | 'input-split' | 'script'; candidateText: string; candidateScript: string; candidateParameterKey: string
+  id: string; enabled: boolean; title: string; description: string; phase: 'before' | 'after' | 'skill-injection' | 'skill-catalog' | 'tool-before' | 'tool-after' | 'external'; eventKey: string; eventDisplay: string; inputParameterKey: string; inputParameterDisplay: string; input: string; customInput: string
+  toolName: string
+  candidateSource: 'none' | 'event-params' | 'custom-list' | 'input-split' | 'script'; candidateText: string; candidateScript: string; candidateParameterKey: string; candidateParameterDisplay: string
   splitMode: 'space' | 'newline' | 'literal'; splitText: string
   selectionMode: 'score-below' | 'score-above' | 'top' | 'bottom'; selectionValue: string
   selectionAction: 'prune' | 'inject-extra'; selectionActionText: string
@@ -26,10 +26,11 @@ const inputNames: Record<string, string> = {
   'tool-results': '本轮工具结果',
   'tool-call': '本次工具名称与参数',
   'tool-result': '本次工具名称、参数与结果',
+  'event-param': '事件参数',
   'custom-text': '自定义文字',
 }
 const actionNames: Record<Action['type'], string> = {
-  none: '不执行动作', 'inject-context': '补充主会话上下文', 'inject-skill': '注入 Skill 正文', 'append-reminder': '在答复末尾追加提醒', 'skip-skill': '跳过此次 Skill 注入', 'keep-top-skills': '保留最相关的 Skill', 'inject-selected-candidates': '注入入选内容', 'deny-tool': '拦截工具调用', 'notify-group': '向工作群报告进度', 'ask-group': '向工作群提问并等待',
+  none: '不执行动作', 'inject-context': '补充主会话上下文', 'inject-skill': '注入 Skill 正文', 'append-reminder': '在答复末尾追加提醒', 'skip-skill': '跳过此次 Skill 注入', 'keep-top-skills': '保留最相关的 Skill', 'inject-selected-candidates': '注入入选内容', 'deny-tool': '拦截工具调用', dispatch: '调用外部动作',
 }
 
 function Choice({ label, value, choices, disabled, onSelect }: {
@@ -49,6 +50,7 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
 }): React.ReactNode {
   const [expandedActionId, setExpandedActionId] = React.useState<string | null>(null)
   const [toolNames, setToolNames] = React.useState<string[]>([])
+  const [capabilities, setCapabilities] = React.useState<{ events: { key: string; display: string; parameters?: { key: string; display: string }[] }[]; adapters: { key: string; display: string; available?: boolean; parameters?: { key: string; display: string; required?: boolean; defaultValue?: string; kind?: 'boolean' | 'number' }[] }[] }>({ events: [], adapters: [] })
   React.useEffect(() => { if (!editing) setExpandedActionId(null) }, [editing])
   React.useEffect(() => {
     if (!editing || !rule.phase.startsWith('tool-')) return
@@ -58,11 +60,19 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
     }).catch(() => { if (active) setToolNames([]) })
     return () => { active = false }
   }, [editing, rule.phase])
+  React.useEffect(() => {
+    if (!editing) return
+    let active = true
+    void fetch('/api/dsh-jev-context-gate/capabilities').then(response => response.json()).then(value => {
+      if (active && Array.isArray(value.events) && Array.isArray(value.adapters)) setCapabilities(value)
+    }).catch(() => { if (active) setCapabilities({ events: [], adapters: [] }) })
+    return () => { active = false }
+  }, [editing])
   const set = (changes: Partial<DraftRule>): void => update({ ...rule, ...changes })
   const updateOption = (id: string, changes: Partial<RuleOption>): void =>
     set({ options: rule.options.map(option => option.id === id ? { ...option, ...changes } : option) })
   const changeEvent = (value: string): void => {
-    if (value !== 'before' && value !== 'after' && value !== 'skill-injection' && value !== 'skill-catalog' && value !== 'tool-before' && value !== 'tool-after') return
+    if (value !== 'before' && value !== 'after' && value !== 'skill-injection' && value !== 'skill-catalog' && value !== 'tool-before' && value !== 'tool-after' && value !== 'external') return
     if (value === 'before') set({ phase: value, candidateSource: 'none', input: 'latest-user-message', question: '', thresholdPercent: '80',
       options: [
         { id: 'option-a', label: '', action: { type: 'none', text: '' } },
@@ -73,24 +83,27 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
         { id: 'option-a', label: '', action: { type: 'none', text: '' } },
         { id: 'option-b', label: '', action: { type: 'none', text: '' } },
       ] })
-    else if (value === 'tool-before' || value === 'tool-after') set({ phase: value, toolName: rule.toolName || '*', candidateSource: 'none', input: value === 'tool-before' ? 'tool-call' : 'tool-result', question: '', thresholdPercent: '80', options: [
-      { id: 'option-a', label: '', action: { type: 'none', text: '' } }, { id: 'option-b', label: '', action: { type: 'none', text: '' } },
-    ] })
+    else if (value === 'tool-before' || value === 'tool-after') set({ phase: value, toolName: rule.toolName || '*', candidateSource: 'none', input: value === 'tool-before' ? 'tool-call' : 'tool-result', question: rule.question, thresholdPercent: '80', options: value === 'tool-after' && rule.candidateSource === 'none'
+      ? rule.options.map(option => ({ ...option, action: ['none', 'inject-context', 'dispatch'].includes(option.action.type) ? option.action : { type: 'none', text: '' } }))
+      : [{ id: 'option-a', label: '', action: { type: 'none', text: '' } }, { id: 'option-b', label: '', action: { type: 'none', text: '' } }] })
     else if (value === 'skill-injection') set({ phase: value, candidateSource: 'none', input: 'skill-summary', question: '', thresholdPercent: '80',
       options: [
         { id: 'option-a', label: '', action: { type: 'none', text: '' } },
         { id: 'option-b', label: '', action: { type: 'none', text: '' } },
       ] })
+    else if (value === 'external') set({ phase: value, eventKey: '', eventDisplay: '', input: 'event-param', inputParameterKey: '', inputParameterDisplay: '', candidateSource: 'none', question: rule.question, thresholdPercent: '80', options: rule.candidateSource === 'none'
+      ? rule.options.map(option => ({ ...option, action: ['none', 'inject-context', 'dispatch'].includes(option.action.type) ? option.action : { type: 'none', text: '' } }))
+      : [{ id: 'option-a', label: '', action: { type: 'none', text: '', params: [] } }, { id: 'option-b', label: '', action: { type: 'none', text: '', params: [] } }] })
     else set({ phase: value, candidateSource: 'event-params', candidateParameterKey: 'skills', title: rule.title || 'Skill 裁剪', input: 'current-context-text', question: '与当前上下文最相关的 Skill 有哪些？', thresholdPercent: '0',
       selectionMode: 'top', selectionValue: '10', selectionAction: 'prune', selectionActionText: '', options: [] })
   }
   const changeCandidateSource = (value: string): void => {
-    if (!['none', 'custom-list', 'input-split', 'script'].includes(value)) return
+    if (!['none', 'event-params', 'custom-list', 'input-split', 'script'].includes(value)) return
     if (value === 'none') set({ candidateSource: 'none', question: '', thresholdPercent: '80', options: [
       { id: 'option-a', label: '', action: { type: 'none', text: '' } },
       { id: 'option-b', label: '', action: { type: 'none', text: '' } },
     ] })
-    else set({ candidateSource: value as Rule['candidateSource'], input: value === 'input-split' ? 'latest-user-message' : 'current-context-text',
+    else set({ candidateSource: value as Rule['candidateSource'], input: value === 'input-split' ? 'latest-user-message' : rule.phase === 'external' ? rule.input : 'current-context-text',
       question: '哪些选项与待判断内容最相关？', thresholdPercent: '0', splitMode: 'newline', splitText: '',
       selectionMode: 'top', selectionValue: '10', selectionAction: 'prune', selectionActionText: '', options: [] })
   }
@@ -103,6 +116,8 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
       ? rule.input === 'latest-user-message'
         ? '运行时读取当前可见的最新一条用户消息；候选选项由当时可用的 Skill 名称与简介动态生成。'
         : '运行时读取当前会话仍可见的文字和这一步的新消息，长度受上下文预算限制；候选选项由当时可用的 Skill 名称与简介动态生成。'
+    : rule.phase === 'external'
+      ? '由事件提供者按事件标识触发。参数以 key 取值，显示名称不参与匹配；未连接提供者时规则不会触发。'
     : rule.phase.startsWith('tool-')
       ? '按选定的工具名称触发；可判断本次调用参数、结果或当前会话文本。'
     : rule.input === 'skill-summary'
@@ -135,6 +150,7 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
           <Choice label="事件" value={rule.phase} disabled={!writable} choices={EVENT_DEFINITIONS.map(event => ({ id: event.key, label: event.display }))} onSelect={changeEvent} />
           <Choice label="待判断内容" value={rule.input} disabled={!writable} choices={rule.phase.startsWith('tool-')
             ? [{ id: 'tool-call', label: inputNames['tool-call'] }, { id: 'tool-result', label: inputNames['tool-result'] }, { id: 'current-context-text', label: inputNames['current-context-text'] }, { id: 'custom-text', label: inputNames['custom-text'] }]
+            : rule.phase === 'external' ? [{ id: 'event-param', label: inputNames['event-param'] }, { id: 'current-context-text', label: inputNames['current-context-text'] }, { id: 'custom-text', label: inputNames['custom-text'] }]
             : rule.phase === 'before'
             ? [{ id: 'latest-user-message', label: inputNames['latest-user-message'] }, { id: 'current-context-text', label: inputNames['current-context-text'] }, ...(ranking ? [] : [{ id: 'user-message-with-skills', label: inputNames['user-message-with-skills'] }]), { id: 'custom-text', label: inputNames['custom-text'] }]
             : rule.phase === 'after' ? [{ id: 'tool-results', label: inputNames['tool-results'] }, { id: 'custom-text', label: inputNames['custom-text'] }]
@@ -145,14 +161,19 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
           <Choice label="监听工具" value={rule.toolName} disabled={!writable} choices={[{ id: '*', label: '全部工具' }, ...[...new Set([rule.toolName, ...toolNames].filter(name => name && name !== '*'))].map(name => ({ id: name, label: name }))]} onSelect={toolName => set({ toolName })} />
           <label className={styles.field}>工具名称<Input value={rule.toolName} maxLength={120} disabled={!writable} placeholder="输入确切工具名，或 *" onChange={event => set({ toolName: event.currentTarget.value })} /></label>
         </div>}
+        {rule.phase === 'external' && <div className={styles.contextFields}>
+          <Choice label="已连接的事件" value={rule.eventKey} disabled={!writable} choices={capabilities.events.map(item => ({ id: item.key, label: item.display }))} onSelect={eventKey => set({ eventKey, eventDisplay: capabilities.events.find(item => item.key === eventKey)?.display ?? rule.eventDisplay })} />
+          <label className={styles.field}>事件 key<Input value={rule.eventKey} maxLength={120} disabled={!writable} placeholder="例如 message.received" onChange={event => set({ eventKey: event.currentTarget.value })} /></label>
+          <label className={styles.field}>显示名称<Input value={rule.eventDisplay} maxLength={120} disabled={!writable} placeholder="例如 监听群消息" onChange={event => set({ eventDisplay: event.currentTarget.value })} /></label>
+        </div>}
+        {rule.phase === 'external' && rule.eventKey && !capabilities.events.some(item => item.key === rule.eventKey) && <p className={styles.actionPreview}>尚无提供者注册此事件；规则可保存，连接提供者后才会触发。</p>}
         <details className={styles.helpDetails}><summary>待判断内容说明</summary><p>{sourceDescription}</p></details>
         {rule.input === 'custom-text' && <label className={styles.field}>自定义待判断内容<textarea className={styles.textarea} value={rule.customInput} maxLength={24000} disabled={!writable} rows={3} placeholder="输入每次事件发生时供判定的固定内容" onChange={event => set({ customInput: event.currentTarget.value })} /></label>}
+        {rule.phase === 'external' && rule.input === 'event-param' && <div className={styles.contextFields}><Choice label="事件参数" value={rule.inputParameterKey} disabled={!writable}
+          choices={capabilities.events.find(item => item.key === rule.eventKey)?.parameters?.map(parameter => ({ id: parameter.key, label: parameter.display })) ?? []} onSelect={inputParameterKey => set({ inputParameterKey })} />
+          <label className={styles.field}>参数 key<Input value={rule.inputParameterKey} maxLength={120} disabled={!writable} placeholder="例如 message" onChange={event => set({ inputParameterKey: event.currentTarget.value })} /></label></div>}
+        {rule.phase === 'external' && rule.input === 'event-param' && <label className={styles.field}>参数显示名称<Input value={rule.inputParameterDisplay} maxLength={120} disabled={!writable} placeholder="例如 收到的消息" onChange={event => set({ inputParameterDisplay: event.currentTarget.value })} /></label>}
       </div>
-      {rule.phase === 'tool-after' && rule.options.some(option => option.action.type === 'notify-group' || option.action.type === 'ask-group') && <details className={styles.helpDetails} open={!rule.groupRouteId || !rule.groupId || !rule.groupRoleId}><summary>工作群目标与等待设置</summary>
-        <div className={styles.contextFields}><label className={styles.field}>Route ID<Input value={rule.groupRouteId} disabled={!writable} placeholder="Rabi Route ID" onChange={event => set({ groupRouteId: event.currentTarget.value })} /></label><label className={styles.field}>群 ID<Input value={rule.groupId} disabled={!writable} placeholder="群号" onChange={event => set({ groupId: event.currentTarget.value })} /></label></div>
-        <div className={styles.contextFields}><label className={styles.field}>人格 ID<Input value={rule.groupRoleId} disabled={!writable} placeholder="查询群消息所属人格" onChange={event => set({ groupRoleId: event.currentTarget.value })} /></label><label className={styles.field}>检查间隔（分钟）<Input type="number" min="1" max="1440" value={rule.pollMinutes} disabled={!writable} onChange={event => set({ pollMinutes: Number(event.currentTarget.value) })} /></label></div>
-        <label className={styles.field}>最多检查次数<Input type="number" min="1" max="1008" value={rule.maxPolls} disabled={!writable} onChange={event => set({ maxPolls: Number(event.currentTarget.value) })} /></label>
-      </details>}
       {rule.phase === 'before' && <div className={styles.ruleStage}>
         <Choice label="选项与行为" value={rule.candidateSource} disabled={!writable} choices={[{ id: 'none', label: '手动配置' }, { id: 'input-split', label: '待判断内容作为选项' }, { id: 'custom-list', label: '固定内容逐行作为选项' }, { id: 'script', label: '脚本生成选项' }]} onSelect={changeCandidateSource} />
         {rule.candidateSource === 'custom-list' && <label className={styles.field}>选项（每行一项）<textarea className={styles.codeArea} value={rule.candidateText} maxLength={64000} disabled={!writable} rows={7} placeholder="注意事项一\n注意事项二\n注意事项三" onChange={event => set({ candidateText: event.currentTarget.value })} /></label>}
@@ -163,6 +184,16 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
       </div>}
       {rule.phase === 'skill-catalog' && <div className={styles.ruleStage}><Choice label="选项与行为" value="event-params" disabled choices={[{ id: 'event-params', label: '事件参数作为选项' }]} onSelect={() => {}} />
         <Choice label="参数" value={rule.candidateParameterKey} disabled={!writable} choices={optionParametersForEvent(rule.phase).map(parameter => ({ id: parameter.key, label: parameter.display }))} onSelect={candidateParameterKey => set({ candidateParameterKey })} /></div>}
+      {rule.phase === 'external' && <div className={styles.ruleStage}>
+        <Choice label="选项与行为" value={rule.candidateSource} disabled={!writable} choices={[{ id: 'none', label: '手动配置' }, { id: 'event-params', label: '事件参数作为选项' }]} onSelect={changeCandidateSource} />
+        {rule.candidateSource === 'event-params' && <><div className={styles.contextFields}>
+          <Choice label="候选参数" value={rule.candidateParameterKey} disabled={!writable}
+            choices={capabilities.events.find(event => event.key === rule.eventKey)?.parameters?.map(parameter => ({ id: parameter.key, label: parameter.display })) ?? []}
+            onSelect={candidateParameterKey => set({ candidateParameterKey, candidateParameterDisplay: capabilities.events.find(event => event.key === rule.eventKey)?.parameters?.find(parameter => parameter.key === candidateParameterKey)?.display ?? '' })} />
+          <label className={styles.field}>候选参数 key<Input value={rule.candidateParameterKey} disabled={!writable} placeholder="例如 items" onChange={event => set({ candidateParameterKey: event.currentTarget.value })} /></label></div>
+          <label className={styles.field}>候选参数显示名称<Input value={rule.candidateParameterDisplay} disabled={!writable} placeholder="例如 待筛选事项" onChange={event => set({ candidateParameterDisplay: event.currentTarget.value })} /></label>
+          <p className={styles.actionPreview}>事件提供者传入文字数组或带 id、text 的列表；Jev 一次评分，裁剪结果通过事件返回值交还提供者。</p></>}
+      </div>}
       <div className={styles.ruleStage}><div className={styles.stageHeading}><strong>题目</strong></div>
         <div className={styles.questionControls}>
           <Choice label="生成方式" value={rule.questionSource} disabled={!writable} choices={[{ id: 'configured', label: '直接配置' }, { id: 'script', label: '自定义脚本' }]} onSelect={value => set({ questionSource: value as DraftRule['questionSource'] })} />
@@ -190,18 +221,42 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
               ? [{ id: 'none', label: actionNames.none }, { id: 'inject-context', label: actionNames['inject-context'] }, { id: 'inject-skill', label: actionNames['inject-skill'] }]
               : rule.phase === 'after' ? [{ id: 'none', label: actionNames.none }, { id: 'append-reminder', label: actionNames['append-reminder'] }]
                 : rule.phase === 'tool-before' ? [{ id: 'none', label: actionNames.none }, { id: 'deny-tool', label: actionNames['deny-tool'] }]
-                  : rule.phase === 'tool-after' ? [{ id: 'none', label: actionNames.none }, { id: 'inject-context', label: actionNames['inject-context'] }, { id: 'notify-group', label: actionNames['notify-group'] }, { id: 'ask-group', label: actionNames['ask-group'] }]
+                  : rule.phase === 'tool-after' || rule.phase === 'external' ? [{ id: 'none', label: actionNames.none }, { id: 'inject-context', label: actionNames['inject-context'] }, { id: 'dispatch', label: actionNames.dispatch }]
                 : rule.phase === 'skill-catalog' ? [{ id: 'none', label: actionNames.none }, { id: 'keep-top-skills', label: actionNames['keep-top-skills'] }]
                   : [{ id: 'none', label: '继续注入' }, { id: 'skip-skill', label: actionNames['skip-skill'] }, { id: 'inject-context', label: actionNames['inject-context'] }]}
-              onSelect={type => { updateOption(option.id, { action: { type: type as Action['type'], text: type === option.action.type ? option.action.text : '' } }); if (!['none', 'skip-skill'].includes(type)) setExpandedActionId(option.id) }} />
+              onSelect={type => { updateOption(option.id, { action: { type: type as Action['type'], text: type === option.action.type ? option.action.text : '', params: type === option.action.type ? option.action.params : type === 'dispatch' ? [
+                { key: 'adapter', display: '适配器', value: 'tool' }, { key: 'toolName', display: '工具名称', value: '' }, { key: 'messageArgument', display: '消息参数名', value: 'text' },
+              ] : [] } }); if (!['none', 'skip-skill'].includes(type)) setExpandedActionId(option.id) }} />
             {!['none', 'skip-skill'].includes(option.action.type) && <Button variant="outline" size="sm" aria-expanded={expandedActionId === option.id} aria-controls={`jev-action-${rule.id}-${option.id}`} onClick={() => setExpandedActionId(current => current === option.id ? null : option.id)}>{expandedActionId === option.id ? '收起内容' : option.action.text.trim() ? '编辑内容' : '填写内容'}</Button>}
           </div>
           {!['none', 'skip-skill'].includes(option.action.type) && (expandedActionId === option.id
-            ? <label className={styles.field} id={`jev-action-${rule.id}-${option.id}`}>{option.action.type === 'inject-skill' ? 'Skill 名称' : '动作内容'}{option.action.type === 'inject-skill'
+            ? <div id={`jev-action-${rule.id}-${option.id}`}><label className={styles.field}>{option.action.type === 'inject-skill' ? 'Skill 名称' : option.action.type === 'dispatch' ? '生成消息的要求' : '动作内容'}{option.action.type === 'inject-skill'
               ? <Input value={option.action.text} maxLength={120} disabled={!writable} placeholder="输入可用的 Skill 名称，例如 code-review" onChange={event => updateOption(option.id, { action: { ...option.action, text: event.currentTarget.value } })} />
               : option.action.type === 'keep-top-skills'
                 ? <Input type="number" min="1" max="50" step="1" value={option.action.text} disabled={!writable} aria-label="保留 Skill 数量" onChange={event => updateOption(option.id, { action: { ...option.action, text: event.currentTarget.value } })} />
               : <textarea className={styles.textarea} value={option.action.text} maxLength={8000} disabled={!writable} rows={3} placeholder="选中此选项时使用的文字" onChange={event => updateOption(option.id, { action: { ...option.action, text: event.currentTarget.value } })} />}</label>
+              {option.action.type === 'dispatch' && <div className={styles.ruleStage}>
+                <Choice label="动作适配器" value={option.action.params?.find(parameter => parameter.key === 'adapter')?.value ?? ''} disabled={!writable}
+                  choices={capabilities.adapters.map(adapter => ({ id: adapter.key, label: adapter.available === false ? `${adapter.display}（未安装）` : adapter.display }))}
+                  onSelect={adapter => updateOption(option.id, { action: { ...option.action, params: [{ key: 'adapter', display: '适配器', value: adapter },
+                    ...(capabilities.adapters.find(item => item.key === adapter)?.parameters ?? []).map(parameter => ({ key: parameter.key, display: parameter.display,
+                      value: (option.action.params ?? []).find(old => old.key === parameter.key)?.value ?? parameter.defaultValue ?? '' }))] } })} />
+                <details className={styles.helpDetails}><summary>手动指定适配器 key</summary><label className={styles.field}>适配器 key<Input value={option.action.params?.find(parameter => parameter.key === 'adapter')?.value ?? ''} disabled={!writable} placeholder="例如 tool" onChange={event => updateOption(option.id, { action: { ...option.action, params: [{ key: 'adapter', display: '适配器', value: event.currentTarget.value }, ...(option.action.params ?? []).filter(parameter => parameter.key !== 'adapter')] } })} /></label></details>
+                {capabilities.adapters.find(adapter => adapter.key === option.action.params?.find(parameter => parameter.key === 'adapter')?.value)?.available === false && <p className={styles.actionPreview}>此适配器尚未安装；其他规则仍可运行，这项动作要等适配器可用后才会执行。</p>}
+                {capabilities.adapters.find(adapter => adapter.key === option.action.params?.find(parameter => parameter.key === 'adapter')?.value)?.parameters?.some(parameter => parameter.required && !(option.action.params ?? []).some(value => value.key === parameter.key && value.value.trim())) && <p className={styles.actionPreview}>动作参数尚未填写完整，运行时不会发送。请填写此适配器的必填项。</p>}
+                {(option.action.params ?? []).filter(parameter => parameter.key !== 'adapter').map((parameter, index) => {
+                  const definition = capabilities.adapters.find(adapter => adapter.key === option.action.params?.find(item => item.key === 'adapter')?.value)?.parameters?.find(item => item.key === parameter.key)
+                  const updateValue = (value: string): void => updateOption(option.id, { action: { ...option.action, params: (option.action.params ?? []).map(item => item === parameter ? { ...item, value } : item) } })
+                  return <div className={styles.contextFields} key={`${parameter.key}-${index}`}>
+                    {!definition && <><label className={styles.field}>参数 key<Input value={parameter.key} disabled={!writable} placeholder="例如 arg.channel" onChange={event => updateOption(option.id, { action: { ...option.action, params: (option.action.params ?? []).map(item => item === parameter ? { ...item, key: event.currentTarget.value } : item) } })} /></label>
+                      <label className={styles.field}>显示名称<Input value={parameter.display} disabled={!writable} placeholder="给人看的名称" onChange={event => updateOption(option.id, { action: { ...option.action, params: (option.action.params ?? []).map(item => item === parameter ? { ...item, display: event.currentTarget.value } : item) } })} /></label></>}
+                    {definition?.kind === 'boolean' ? <Choice label={`${definition.display} · ${parameter.key}`} value={parameter.value} disabled={!writable} choices={[{ id: 'true', label: '是' }, { id: 'false', label: '否' }]} onSelect={updateValue} />
+                      : <label className={styles.field}>{definition?.display || parameter.display || '参数值'} · {parameter.key}<Input type={definition?.kind === 'number' ? 'number' : 'text'} value={parameter.value} disabled={!writable} onChange={event => updateValue(event.currentTarget.value)} /></label>}
+                    <Button variant="ghost" size="sm" disabled={!writable || definition?.required} onClick={() => updateOption(option.id, { action: { ...option.action, params: (option.action.params ?? []).filter(item => item !== parameter) } })}>移除</Button>
+                  </div>
+                })}
+                <Button variant="outline" size="sm" disabled={!writable || (option.action.params?.length ?? 0) >= 32} onClick={() => updateOption(option.id, { action: { ...option.action, params: [...(option.action.params ?? []), { key: '', display: '', value: '' }] } })}>添加动作参数</Button>
+              </div>}</div>
             : <p className={styles.actionPreview}>{option.action.text.trim() || '尚未填写动作内容'}</p>)}
         </div>)}</div>}
         {!ranking && <Button variant="outline" size="sm" disabled={!writable || rule.options.length >= 16} onClick={() => set({ options: [...rule.options, { id: `option-${crypto.randomUUID().replaceAll('-', '')}`, label: '', action: { type: 'none', text: '' } }] })}>添加选项</Button>}

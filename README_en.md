@@ -4,6 +4,18 @@ English | [简体中文](README.md)
 
 Jev rules for DSH. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Model IDs starting with `jev-` are labeled native; structured native calls still require a provider adapter.
 
+## 0.1.21
+
+Events, judged input, and action targets are configured separately. An “External event” rule stores a stable event key, display name, and the key of the event parameter to judge. Connected event sources expose their parameters with separate keys and display names. A rule with no connected source can be saved but does not fire. A source may provide group messages, direct messages, or daily records by emitting a stable event ID, an Agent, and named parameters; Jev does not claim to monitor a channel that has no source.
+
+“Dispatch external action” belongs to a selected option. Its parameters have independently saved keys and display names. The built-in `tool` adapter can call any installed tool, placing the composed message in a configured argument and passing `arg.*` values as additional arguments. `rabi` is an optional adapter: channel, recipient kind and ID, Route ID, reply wait, and polling interval are option parameters. Rabi can be absent without preventing other rules from loading. Previously saved group fields migrate to option parameters on read. Both supplied rules can change their event, watched tool, question, options, and action.
+
+An extension plugin registers an event with `ctx.inject(['jev'], scope => scope.jev.registerEvent({ key, display, parameters }))`, then emits it using `scope.jev.emit({ key, id, agent, parameters, signal })`; registration returns a disposer. Adapters register with `scope.jev.registerAdapter({ key, display, parameters }, handler)`. Parameter definitions have stable `key` and independent `display` fields, with optional `required`, `kind`, and `defaultValue`. This release does not ship an inbound group-message source. A message-source plugin must register and emit that event. Reply polling remains process-local and does not resume after restart.
+
+An external-event rule can use an event parameter as its options. The provider supplies an array of strings or `{ id, text }` entries; one model request scores them all, and the saved threshold or top/bottom count selects the result. `emit()` returns `parameters` with that candidate parameter replaced by the selected entries, plus per-rule `selections`. The event provider applies the returned data to the event it owns. Candidate text is limited to 64,000 characters; the model's input and output capacity sets the practical item count.
+
+The generic tool action accepts `toolName`, `messageArgument`, and any `arg.<tool argument>` parameters. If the target tool supports deduplication, set `idempotencyArgument` to its argument name. The same session, event, and rule produce the same ID; the target tool owns deduplication.
+
 ## 0.1.20
 
 Tool-before and tool-after events can match an exact tool name, a prefix such as `rabiroute_*`, or all tools. A selected before action may deny dispatch. An after action may attach context or send a work-group progress update or question through Rabi.

@@ -3,9 +3,19 @@ import assert from 'node:assert/strict';
 import { defaultRules, SettingsSchema } from '../src/settings.mjs';
 import { evaluatePolicy, validateRules } from '../src/policy.mjs';
 import { matchesTool, toolRuleInput, sendGroupMessage, readGroupReply, startGroupPolling, deliveryIdFor, rabiTimeSeconds } from '../src/tool-automation.mjs';
+import { dispatchToRabi } from '../src/dispatch-adapters.mjs';
 
-const configured = (id, overrides = {}) => ({ ...defaultRules.find(rule => rule.id === id), enabled: true,
-  groupRouteId: 'route-a', groupId: '123', groupRoleId: 'role-a', ...overrides });
+const configured = (id, overrides = {}) => {
+  const base = defaultRules.find(rule => rule.id === id);
+  const values = { routeId: 'route-a', targetId: '123', roleId: 'role-a' };
+  const fields = { ...base, enabled: true, groupRouteId: 'route-a', groupId: '123', groupRoleId: 'role-a',
+    channel: 'napcat', target: 'group', targetId: '123', pollMinutes: 10, maxPolls: 432, ...overrides };
+  values.routeId = fields.groupRouteId;
+  values.targetId = fields.groupId;
+  values.roleId = fields.groupRoleId;
+  return { ...fields, options: overrides.options ?? base.options.map(option => option.action.type === 'dispatch' ? { ...option,
+    action: { ...option.action, params: option.action.params.map(parameter => Object.hasOwn(values, parameter.key) ? { ...parameter, value: values[parameter.key] } : parameter) } } : option) };
+};
 
 test('tool events select exact or prefix tool and high-confidence pre-action denies', () => {
   const rule = configured('rabi-progress', { id: 'deny', phase: 'tool-before', input: 'tool-call',
@@ -17,7 +27,7 @@ test('tool events select exact or prefix tool and high-confidence pre-action den
   assert.notEqual(deliveryIdFor('session-a', 'call-a', 'rule-a'), deliveryIdFor('session-a', 'call-b', 'rule-a'));
   assert.equal(validateRules([rule])[0].toolName, 'rabiroute_*');
   const result = evaluatePolicy({ rules: [rule], phase: 'tool-before', verdicts: { deny: { probabilities: { stop: 0.95, go: 0.05 } } } });
-  assert.deepEqual(result.decisions[0].action, { type: 'deny-tool', text: '先核对目标' });
+  assert.deepEqual(result.decisions[0].action, { type: 'deny-tool', text: '先核对目标', params: [] });
   assert.equal(evaluatePolicy({ rules: [rule], phase: 'tool-before', verdicts: { deny: { probabilities: { stop: 0.7, go: 0.3 } } } }).decisions[0].status, 'below-threshold');
 });
 
@@ -29,9 +39,31 @@ test('tool input chooses call, outcome or visible conversation without trusting 
   assert.match(toolRuleInput({ input: 'current-context-text' }, exec, outcome), /当前问题/);
 });
 
-test('saved group actions need explicit destination before they can be enabled', () => {
-  assert.throws(() => validateRules([configured('rabi-progress', { groupId: '' })]), /Group action requires/);
+test('destination belongs to the selected action and is checked by its adapter', async () => {
+  const rule = configured('rabi-progress', { groupId: '' });
+  assert.equal(validateRules([rule])[0].options[0].action.params.find(parameter => parameter.key === 'targetId').value, '');
+  await assert.rejects(dispatchToRabi({ action: rule.options[0].action }), /missing destination parameters/);
   assert.equal(SettingsSchema({ rules: defaultRules }).rules.length, defaultRules.length);
+});
+
+test('a saved Rabi action can target a personal conversation instead of a group', async () => {
+  const calls = [];
+  const action = structuredClone(configured('rabi-progress').options[0].action);
+  const values = { channel: 'personal-channel', target: 'person', targetId: 'user-7', targetIdKey: 'personId' };
+  for (const [key, value] of Object.entries(values)) {
+    const entry = action.params.find(parameter => parameter.key === key);
+    if (entry) entry.value = value;
+    else action.params.push({ key, display: key, value });
+  }
+  const ctx = { tools: { schemas: () => [{ name: 'rabiroute_agent_send' }], execute: async request => {
+    calls.push(request);
+    return { isError: false, value: { ok: true, body: JSON.stringify({ ok: true, status: 'sent', sentMessageId: 'm-7' }) } };
+  } } };
+  await dispatchToRabi({ ctx, agent: { session: { id: 'session-a' } }, action, message: '进度已确认', signal: new AbortController().signal,
+    internalCalls: new Set(), eventId: 'event-a', ruleId: 'rule-a' });
+  const request = JSON.parse(calls[0].arguments.requestJson);
+  assert.equal(request.channel, 'personal-channel');
+  assert.deepEqual(request.params, { target: 'person', personId: 'user-7', replyToMessageId: '', replyImageDescriptions: [] });
 });
 
 test('group send checks Rabi channel receipt and history query accepts only inbound after send', async () => {

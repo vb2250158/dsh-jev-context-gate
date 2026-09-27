@@ -10,7 +10,10 @@ import { createTestHandler } from './test-route.mjs';
 import { resolveSkillRequests } from './skill-injection.mjs';
 import { catalogInput, rankCatalog, pruneCatalogMessage } from './catalog-prune.mjs';
 import { resolveCandidates } from './candidate-source.mjs';
-import { toolRuleInput, matchesTool, composeGroupMessage, sendGroupMessage, startGroupPolling, deliveryIdFor, rabiTimeSeconds } from './tool-automation.mjs';
+import { selectEventCandidates } from './event-selection.mjs';
+import { toolRuleInput, matchesTool, composeGroupMessage } from './tool-automation.mjs';
+import { createCapabilityRegistry, actionParameter } from './capability-registry.mjs';
+import { dispatchToTool, dispatchToRabi } from './dispatch-adapters.mjs';
 export { Config, DEFAULT_SETTINGS, SETTINGS_NAMESPACE, SettingsSchema } from './settings.mjs';
 export { evaluatePolicy } from './policy.mjs';
 export const name = 'dsh-jev-context-gate';
@@ -24,9 +27,10 @@ const selectedText = (rule, selected) => {
 
 export function apply(ctx, config = {}) {
   const scope = ctx.settings.register(SETTINGS_NAMESPACE, SettingsSchema, { base: { ...DEFAULT_SETTINGS, ...Config(config) } });
+  const capabilities = createCapabilityRegistry();
   const internalCalls = new Set();
   const pendingQuestions = new Set();
-  const uncertainGroupRules = new Set();
+  const uncertainDeliveries = new Set();
   const pollController = new AbortController();
   ctx.effect(() => () => pollController.abort());
   const runRules = async (settings, phase, inputFor, signal) => {
@@ -45,6 +49,58 @@ export function apply(ctx, config = {}) {
     return judge({ settings, phase, inputs, preparedRules: rules, signal,
       stream: options => ctx.llm.stream(options), createMessage: contextMessage });
   };
+  ctx.effect(() => capabilities.registerAdapter({ key: 'tool', display: '调用已安装工具', parameters: [
+    { key: 'toolName', display: '工具名称', required: true }, { key: 'messageArgument', display: '消息参数名', defaultValue: 'text' },
+    { key: 'idempotencyArgument', display: '幂等 ID 参数名' },
+  ] }, dispatchToTool));
+  ctx.effect(() => capabilities.registerAdapter({ key: 'rabi', display: 'Rabi 消息渠道', parameters: [
+    { key: 'routeId', display: 'Route ID', required: true }, { key: 'channel', display: '渠道', required: true }, { key: 'target', display: '对象类型', required: true },
+    { key: 'targetId', display: '对象 ID', required: true }, { key: 'roleId', display: '人格 ID' }, { key: 'waitForReply', display: '等待回复', kind: 'boolean', defaultValue: 'false' },
+    { key: 'pollMinutes', display: '检查间隔（分钟）', kind: 'number', defaultValue: '10' }, { key: 'maxPolls', display: '最多检查次数', kind: 'number', defaultValue: '432' },
+  ] }, dispatchToRabi));
+  const dispatch = async ({ action, agent, eventText, signal, eventId, ruleId, onDone }) => {
+    const adapterKey = actionParameter(action, 'adapter');
+    const adapter = capabilities.adapter(adapterKey);
+    if (!adapter) throw new Error(`Jev action adapter ${adapterKey || '(empty)'} is unavailable`);
+    const message = await composeGroupMessage({ ctx, settings: scope.get(), instruction: action.text, eventText, signal, createMessage: contextMessage });
+    return adapter({ ctx, agent, action, message, signal, internalCalls, eventId, ruleId, settings: scope.get(), logger: ctx.logger,
+      pollSignal: pollController.signal, createMessage: contextMessage, onDone });
+  };
+  const service = {
+    registerEvent: (definition) => capabilities.registerEvent(definition),
+    registerAdapter: (definition, handler) => capabilities.registerAdapter(definition, handler),
+    events: () => capabilities.events(), adapters: () => capabilities.adapters(),
+    emit: async ({ key, id, agent, parameters = {}, signal = new AbortController().signal }) => {
+      if (!capabilities.event(key)) throw new Error(`Jev event ${key} has no registered source`);
+      if (typeof id !== 'string' || !id.trim() || !agent?.session?.id) throw new TypeError('Jev external event needs a stable ID and agent session');
+      const settings = scope.get();
+      if (!settings.enabled) return { decisions: [], context: '' };
+      const rules = validateRules(settings.rules).filter(rule => rule.enabled && rule.phase === 'external' && rule.eventKey === key);
+      const updatedParameters = { ...parameters };
+      const textFor = rule => rule.input === 'custom-text' ? rule.customInput
+        : rule.input === 'event-param' ? (typeof updatedParameters[rule.inputParameterKey] === 'string' ? updatedParameters[rule.inputParameterKey] : JSON.stringify(updatedParameters[rule.inputParameterKey] ?? ''))
+          : catalogInput(rule, agent, [], settings.maxContextCharacters);
+      const manualRules = rules.filter(rule => rule.candidateSource === 'none');
+      const result = await runRules({ ...settings, rules: manualRules }, 'external', textFor, signal);
+      for (const hit of result.decisions?.filter(row => row.status === 'applied' && row.action?.type === 'dispatch') ?? []) {
+        const rule = rules.find(row => row.id === hit.ruleId);
+        await dispatch({ action: hit.action, agent, eventText: textFor(rule), signal, eventId: id, ruleId: rule.id });
+      }
+      if (result.context) agent.followup(contextMessage(result.context));
+      const selections = [];
+      for (const rule of rules.filter(row => row.candidateSource === 'event-params')) {
+        const input = textFor(rule);
+        if (!input) continue;
+        const selected = await selectEventCandidates({ settings, rule, parameters: updatedParameters, input, signal,
+          stream: options => ctx.llm.stream(options), createMessage: contextMessage });
+        updatedParameters[rule.candidateParameterKey] = selected;
+        selections.push({ ruleId: rule.id, parameterKey: rule.candidateParameterKey, selected: updatedParameters[rule.candidateParameterKey] });
+        if (rule.selectionAction === 'inject-extra' && selected.length) agent.followup(contextMessage(selectedText(rule, selected.map(entry => ({ description: entry.text })))));
+      }
+      return { ...result, parameters: updatedParameters, selections };
+    },
+  };
+  ctx.effect(() => ctx.provide('jev', service));
   ctx.on('tools/pre-execute', async (exec, next) => {
     const settings = scope.get();
     if (!settings.enabled || internalCalls.has(exec.callId) || !exec.agent || exec.signal.aborted) return next();
@@ -69,25 +125,20 @@ export function apply(ctx, config = {}) {
     try {
       const outcome = await runRules({ ...settings, rules }, 'tool-after', rule => toolRuleInput(rule, exec, toolResult, settings.maxContextCharacters), exec.signal);
       const contexts = outcome.context ? [contextMessage(outcome.context)] : [];
-      for (const hit of outcome.decisions?.filter(row => row.status === 'applied' && ['notify-group', 'ask-group'].includes(row.action?.type)) ?? []) {
+      for (const hit of outcome.decisions?.filter(row => row.status === 'applied' && row.action?.type === 'dispatch') ?? []) {
         const rule = rules.find(row => row.id === hit.ruleId);
         if (!rule) continue;
         const key = `${exec.agent.session.id}:${rule.id}`;
-        if (uncertainGroupRules.has(key)) continue;
-        const question = hit.action.type === 'ask-group';
-        if (question && pendingQuestions.has(key)) continue;
-        if (question) pendingQuestions.add(key);
+        const waiting = actionParameter(hit.action, 'waitForReply') === 'true';
+        if (uncertainDeliveries.has(key) || waiting && pendingQuestions.has(key)) continue;
+        if (waiting) pendingQuestions.add(key);
         try {
-          const eventText = toolRuleInput(rule, exec, toolResult, settings.maxContextCharacters);
-          const message = await composeGroupMessage({ ctx, settings, instruction: hit.action.text, eventText, signal: exec.signal, createMessage: contextMessage });
-          const sentAt = rabiTimeSeconds(Date.now());
-          const receipt = await sendGroupMessage({ ctx, agent: exec.agent, rule, message, deliveryId: deliveryIdFor(exec.agent.session.id, exec.callId, rule.id), signal: exec.signal, internalCalls });
-          ctx.logger.info(`Jev ${rule.id} group delivery confirmed: ${receipt.sentMessageId}`);
-          if (question) startGroupPolling({ ctx, agent: exec.agent, rule, sentAt, sentMessageId: receipt.sentMessageId, questionText: message, settings, signal: pollController.signal, logger: ctx.logger, internalCalls, createMessage: contextMessage,
-            onDone: () => pendingQuestions.delete(key) });
+          await dispatch({ action: hit.action, agent: exec.agent, eventText: toolRuleInput(rule, exec, toolResult, settings.maxContextCharacters), signal: exec.signal,
+            eventId: exec.callId, ruleId: rule.id, onDone: () => pendingQuestions.delete(key) });
+          if (!waiting) pendingQuestions.delete(key);
         } catch (error) {
-          if (error?.code === 'UNCERTAIN_GROUP_DELIVERY') uncertainGroupRules.add(key);
-          else if (question) pendingQuestions.delete(key);
+          if (error?.code === 'UNCERTAIN_DELIVERY') uncertainDeliveries.add(key);
+          else pendingQuestions.delete(key);
           throw error;
         }
       }
@@ -111,6 +162,15 @@ export function apply(ctx, config = {}) {
       handler: (_request, response) => {
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
         response.end(JSON.stringify({ tools: ctx.tools.schemas().map(tool => tool.name).sort() }));
+      },
+    }));
+    web.effect(() => web.webServer.register({
+      kind: 'exact', path: '/api/dsh-jev-context-gate/capabilities',
+      handler: (_request, response) => {
+        response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        const toolNames = new Set(ctx.tools.schemas().map(tool => tool.name));
+        response.end(JSON.stringify({ events: capabilities.events(), adapters: capabilities.adapters().map(adapter => ({ ...adapter,
+          available: adapter.key !== 'rabi' || toolNames.has('rabiroute_agent_send') && toolNames.has('rabiroute_manager_api') })) }));
       },
     }));
   });

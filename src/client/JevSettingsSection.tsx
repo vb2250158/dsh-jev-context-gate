@@ -36,7 +36,12 @@ function validateDraft(rules: DraftRule[]): Rule[] {
     if (rule.candidateSource !== 'none' && rule.selectionAction === 'inject-extra' && !rule.selectionActionText.trim()) throw new Error(`${label}缺少额外注入内容。`)
     if (rule.options.some(option => option.action.type === 'inject-skill' && (option.action.text.length > 120 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(option.action.text)))) throw new Error(`${label}的 Skill 名称应为 120 字以内的小写字母、数字和连字符。`)
     if (rule.phase.startsWith('tool-') && !rule.toolName.trim()) throw new Error(`${label}需要选择监听的工具。`)
-    if (rule.enabled && rule.options.some(option => option.action.type === 'notify-group' || option.action.type === 'ask-group') && (!rule.groupRouteId.trim() || !rule.groupId.trim() || !rule.groupRoleId.trim())) throw new Error(`${label}需要填写 Route ID、群 ID 和人格 ID。`)
+    if (rule.phase === 'external' && (!rule.eventKey.trim() || rule.input === 'event-param' && !rule.inputParameterKey.trim())) throw new Error(`${label}需要事件 key 和待判断参数 key。`)
+    if (rule.phase === 'external' && rule.candidateSource === 'event-params' && !rule.candidateParameterKey.trim()) throw new Error(`${label}需要候选参数 key。`)
+    for (const option of rule.options) if (option.action.type === 'dispatch') {
+      const params = option.action.params ?? []
+      if (!params.some(parameter => parameter.key === 'adapter' && parameter.value.trim()) || params.some(parameter => !parameter.key.trim()) || new Set(params.map(parameter => parameter.key)).size !== params.length) throw new Error(`${label}的动作适配器或参数 key 无效。`)
+    }
     if (rule.candidateSource === 'none' && (rule.options.length < 2 || rule.options.length > 16 || rule.options.some(option => !option.label.trim() || (!['none', 'skip-skill'].includes(option.action.type) && !option.action.text.trim())))) throw new Error(`${label}的选项文案或动作参数不完整。`)
     const threshold = Number(rule.thresholdPercent)
     if (!rule.thresholdPercent.trim() || !Number.isFinite(threshold) || threshold < 0 || threshold > 100) throw new Error(`${label}的阈值应为 0 至 100%。`)
@@ -196,7 +201,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
         <div className={styles.ruleActions}>
           <Button variant="outline" size="sm" disabled={!writable || (draftRules?.length ?? 0) >= 64} onClick={() => {
             const id = `rule-${crypto.randomUUID().replaceAll('-', '')}`
-            setDraftRules(rules => [...(rules ?? []), { id, enabled: true, title: '', description: '', phase: 'before', toolName: '', groupRouteId: '', groupId: '', groupRoleId: '', pollMinutes: 10, maxPolls: 432, input: 'latest-user-message', customInput: '', candidateSource: 'none', candidateText: '', candidateScript: '', candidateParameterKey: '',
+            setDraftRules(rules => [...(rules ?? []), { id, enabled: true, title: '', description: '', phase: 'before', eventKey: '', eventDisplay: '', inputParameterKey: '', inputParameterDisplay: '', toolName: '', input: 'latest-user-message', customInput: '', candidateSource: 'none', candidateText: '', candidateScript: '', candidateParameterKey: '', candidateParameterDisplay: '',
               splitMode: 'newline', splitText: '', selectionMode: 'top', selectionValue: '10', selectionAction: 'prune', selectionActionText: '',
               questionSource: 'configured', questionScript: '', question: '', thresholdPercent: '80',
               options: [{ id: 'yes', label: '是', action: { type: 'inject-context', text: '' } }, { id: 'no', label: '否', action: { type: 'none', text: '' } }] }])

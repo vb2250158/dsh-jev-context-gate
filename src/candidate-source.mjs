@@ -28,11 +28,16 @@ export async function resolveCandidates(rule, input, signal) {
       });
     } finally { await worker.terminate(); }
   } else throw new TypeError('Unsupported candidate source');
+  return normalizeCandidates(value);
+}
+
+/** Normalize candidate arrays supplied by a script, configured text or an event provider. */
+export function normalizeCandidates(value) {
   if (!Array.isArray(value) || value.length < 2) throw new TypeError('候选项至少需要 2 条。');
   const ids = new Set();
   const entries = value.map((item, index) => {
-    const id = typeof item === 'string' ? `item-${index + 1}` : item?.id;
-    const content = typeof item === 'string' ? item : item?.text;
+    const id = typeof item === 'string' ? `item-${index + 1}` : item?.id ?? item?.name;
+    const content = typeof item === 'string' ? item : item?.text ?? item?.description;
     if (typeof id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(id) || ids.has(id)
       || typeof content !== 'string' || !content.trim() || content.length > 2000) throw new TypeError('候选项 ID 或内容无效。');
     ids.add(id);
