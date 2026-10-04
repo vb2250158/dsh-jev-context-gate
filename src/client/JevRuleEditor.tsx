@@ -121,7 +121,7 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
     : rule.phase.startsWith('tool-')
       ? '按选定的工具名称触发；可判断本次调用参数、结果或当前会话文本。'
     : rule.input === 'skill-summary'
-      ? '每次 Jev 规则选中 Skill 后、加载正文前触发；输入包含本次 Skill 名称、简介和最新用户消息。题目和选项由本规则配置。'
+      ? '每次智能规则选中 Skill 后、加载正文前触发；输入包含本次 Skill 名称、简介和最新用户消息。题目和选项由本规则配置。'
     : rule.input === 'skill-content'
       ? '输入为本次 Skill 名称和完整正文；超过判定输入上限时，本次注入不执行。'
     : rule.input === 'current-context-text'
@@ -192,7 +192,7 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
             onSelect={candidateParameterKey => set({ candidateParameterKey, candidateParameterDisplay: capabilities.events.find(event => event.key === rule.eventKey)?.parameters?.find(parameter => parameter.key === candidateParameterKey)?.display ?? '' })} />
           <label className={styles.field}>候选参数 key<Input value={rule.candidateParameterKey} disabled={!writable} placeholder="例如 items" onChange={event => set({ candidateParameterKey: event.currentTarget.value })} /></label></div>
           <label className={styles.field}>候选参数显示名称<Input value={rule.candidateParameterDisplay} disabled={!writable} placeholder="例如 待筛选事项" onChange={event => set({ candidateParameterDisplay: event.currentTarget.value })} /></label>
-          <p className={styles.actionPreview}>事件提供者传入文字数组或带 id、text 的列表；Jev 一次评分，裁剪结果通过事件返回值交还提供者。</p></>}
+          <p className={styles.actionPreview}>事件提供者传入文字数组或带 id、text 的列表；智能规则一次评分，裁剪结果通过事件返回值交还提供者。</p></>}
       </div>}
       <div className={styles.ruleStage}><div className={styles.stageHeading}><strong>题目</strong></div>
         <div className={styles.questionControls}>

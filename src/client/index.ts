@@ -19,7 +19,7 @@ export function apply(ctx: ClientContext): void {
     name: 'settings.section',
     id: 'jev-context-gate',
     order: 27,
-    label: () => 'Jev',
+    label: () => '智能规则',
     inject: () => ({ scope, loadCatalog }),
   }, JevSettingsSection))
 }

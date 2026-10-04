@@ -51,7 +51,7 @@ export function JevTestPage({ model, onBack }: JevTestPageProps): React.ReactNod
 
   return <section className={styles.section}>
     <header className={styles.pageHeader}>
-      <div><h2>Jev 选择题测试</h2><p className={styles.intro}>输入内容、题目和选项，查看模型选择及各选项概率。</p></div>
+      <div><h2>智能规则判定测试</h2><p className={styles.intro}>输入内容、题目和选项，查看模型选择及各选项概率。</p></div>
       <Button variant="outline" size="sm" onClick={onBack}>返回规则配置</Button>
     </header>
     <div className={styles.panel}>

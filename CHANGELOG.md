@@ -1,5 +1,9 @@
 # 更新记录
 
+## 0.1.25
+
+- 将设置菜单、页面标题及插件操作说明中的 Jev 名称改为“智能规则”；保留包名、配置键和原生模型名称。
+
 ## 0.1.24
 
 - Include the schema build dependency when pnpm prepares the Git package.

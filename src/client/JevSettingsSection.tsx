@@ -51,7 +51,7 @@ function validateDraft(rules: DraftRule[]): Rule[] {
 }
 
 export function JevSettingsSection(props: JevSettingsSectionProps): React.ReactNode {
-  if (!props.scope || !props.loadCatalog) return <p role="alert">Jev 设置服务未注入。</p>
+  if (!props.scope || !props.loadCatalog) return <p role="alert">智能规则设置服务未注入。</p>
   return <Loaded scope={props.scope} loadCatalog={props.loadCatalog} />
 }
 
@@ -165,14 +165,14 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
   if (page === 'test') return <JevTestPage model={current} onBack={() => setPage('rules')} />
   return <section className={styles.section}>
     <header className={styles.pageHeader}>
-      <div><h2>Jev 规则配置</h2></div>
+      <div><h2>智能规则配置</h2></div>
       <div className={styles.headerActions}>{current && <span className={current.enabled ? styles.statusOn : styles.statusOff}>{current.enabled ? '已启用' : '未启用'}</span>}<Button variant="primary" size="sm" onClick={() => setPage('test')}>打开测试页面</Button></div>
     </header>
     {snapshot.status !== 'ready' || !current ? <p role="status">{snapshot.status === 'loading' ? '正在读取设置…' : '设置不可用，无法读取或保存。'}</p> : <>
       {!snapshot.writable && <p role="status">当前设置只读，无法保存修改。</p>}
       <div className={styles.panel}>
         <div className={styles.sectionHeading}><h3>运行设置</h3></div>
-        <div className={styles.row}><span>启用 Jev</span><Switch checked={current.enabled} disabled={!writable} label="启用 Jev" onChange={enabled => patch({ enabled })} /></div>
+        <div className={styles.row}><span>启用智能规则</span><Switch checked={current.enabled} disabled={!writable} label="启用智能规则" onChange={enabled => patch({ enabled })} /></div>
         <div className={styles.modelField}><span>判定模型</span>
           <Menu autoFocus portal open={modelMenuOpen && writable} onClose={() => setModelMenuOpen(false)}
             selectedId={current.provider || current.model ? JSON.stringify([current.provider, current.model]) : 'unconfigured'}
