@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-Smart Rules for DSH (package `dsh-jev-context-gate`). Settings → 智能规则 configures event judgments, content selection, and actions. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Model IDs starting with `jev-` are labeled native; structured native calls still require a provider adapter.
+Smart Rules for DSH (package `dsh-jev-context-gate`). Settings → 智能规则 configures event judgments, content selection, and actions; DSH 0.2 reads and writes configuration by the plugin entry ID `dsh-jev-context-gate`. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Model IDs starting with `jev-` are labeled native; structured native calls still require a provider adapter.
 
 ## 0.1.22
 

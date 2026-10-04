@@ -9,7 +9,7 @@ export const inject = ['slots', 'configForms', 'remote', 'remote.session']
 
 export function apply(ctx: ClientContext): void {
   // The default decoder validates the Host namespace's serialized schema.
-  const scope = ctx.configForms.get<Settings>('jev-context-gate' )
+  const scope = ctx.configForms.get<Settings>('dsh-jev-context-gate')
   const loadCatalog = async (): Promise<ModelCatalog> => {
     const response = await ctx.remote.session.modelCatalog()
     if (!response.ok) throw new Error(`${response.error.code}: ${response.error.message}`)

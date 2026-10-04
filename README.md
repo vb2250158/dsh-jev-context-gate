@@ -4,7 +4,7 @@ This release requires DSH 0.2.1-alpha.1 or a compatible 0.2 release. See [compat
 
 [English](README_en.md) | 简体中文
 
-DSH 的智能规则插件（包名 `dsh-jev-context-gate`）。设置 → 智能规则可配置事件判断、内容筛选和动作执行。选择独立判定模型后，按事件读取待判断内容、提出选择题，并执行获选选项配置的行为。普通模型使用 LLM JSON 估计选项概率；型号以 `jev-` 开头时标为 Jev 原生，原生结构化调用仍需模型提供商接入。
+DSH 的智能规则插件（包名 `dsh-jev-context-gate`）。设置 → 智能规则可配置事件判断、内容筛选和动作执行；DSH 0.2 的配置按插件入口 ID `dsh-jev-context-gate` 读写。选择独立判定模型后，按事件读取待判断内容、提出选择题，并执行获选选项配置的行为。普通模型使用 LLM JSON 估计选项概率；型号以 `jev-` 开头时标为 Jev 原生，原生结构化调用仍需模型提供商接入。
 
 ## 0.1.22
 
