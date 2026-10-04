@@ -1,5 +1,9 @@
 # 更新记录
 
+## 0.1.24
+
+- Include the schema build dependency when pnpm prepares the Git package.
+
 ## 0.1.23
 
 - Update DSH compatibility requirements and interfaces for 0.2.1-alpha.1.
