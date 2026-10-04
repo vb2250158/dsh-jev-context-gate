@@ -132,4 +132,4 @@ const normalize = value => {
   return { ...value, rules };
 };
 export const SettingsSchema = z.transform(z.object(fields), normalize, true);
-export const Config = SettingsSchema.volatile();
+export const Config = SettingsSchema.volatile().default({});

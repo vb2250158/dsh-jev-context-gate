@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import Schema from '@deepseek-ai/schemastery';
 import { Config, DEFAULT_SETTINGS, SettingsSchema } from '../src/settings.mjs';
 
+test('a plugin entry without config exposes the default settings', () => {
+  assert.deepEqual(Config(undefined).get(), SettingsSchema(DEFAULT_SETTINGS));
+});
+
 test('default rules have option-owned actions and the schema migrates saved legacy rules', () => {
   assert.deepEqual(Config({}).get(), SettingsSchema(DEFAULT_SETTINGS));
   assert.match(DEFAULT_SETTINGS.rules[0].options[0].action.text, /源码、配置、日志/);
