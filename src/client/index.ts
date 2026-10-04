@@ -4,12 +4,13 @@ import type {} from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelCatalog } from '@deepseek-ai/dsh-api-remotes/client'
 import { JevSettingsSection, type Settings } from './JevSettingsSection.tsx'
+import { createSettingsForm } from './settings-form.mjs'
 
 export const inject = ['slots', 'configForms', 'remote', 'remote.session']
 
 export function apply(ctx: ClientContext): void {
-  // The default decoder validates the Host namespace's serialized schema.
-  const scope = ctx.configForms.get<Settings>('dsh-jev-context-gate')
+  // Rule migration callbacks are executable code and cannot cross the JSON settings transport.
+  const scope = createSettingsForm(ctx.configForms.get<Settings>('dsh-jev-context-gate'), ctx.configForms.describe())
   const loadCatalog = async (): Promise<ModelCatalog> => {
     const response = await ctx.remote.session.modelCatalog()
     if (!response.ok) throw new Error(`${response.error.code}: ${response.error.message}`)
