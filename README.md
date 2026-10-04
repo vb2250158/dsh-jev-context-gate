@@ -1,5 +1,7 @@
 # dsh-jev-context-gate
 
+This release requires DSH 0.2.1-alpha.1 or a compatible 0.2 release. See [compatibility details](docs/dsh-0.2-compatibility.md).
+
 [English](README_en.md) | 简体中文
 
 DSH 的 Jev 规则插件。选择独立判定模型后，按事件读取待判断内容、提出选择题，并执行获选选项配置的行为。普通模型使用 LLM JSON 估计选项概率；型号以 `jev-` 开头时标为 Jev 原生，原生结构化调用仍需模型提供商接入。

@@ -8,7 +8,7 @@ export function visibleSkillNames(agent) {
     if (event?.type !== 'user/message') continue;
     const source = event.data.source;
     if (source?.kind === 'skill-invocation') names.add(source.name);
-    if (source?.kind === 'plugin' && source.plugin?.startsWith(skillSourcePrefix)) names.add(source.plugin.slice(skillSourcePrefix.length));
+    if (source?.kind?.startsWith(`plugin:${skillSourcePrefix}`)) names.add(source.kind.slice(`plugin:${skillSourcePrefix}`.length));
   }
   return names;
 }
@@ -64,7 +64,7 @@ export async function resolveSkillRequests({ requests, existingMessages, skills,
       outcomes.push({ ruleId: request.ruleId, status: 'budget-exceeded' });
       continue;
     }
-    messages.push(createMessage(text, { kind: 'plugin', plugin: `${skillSourcePrefix}${skill.name}`, form: 'instructions' }));
+    messages.push(createMessage(text, { kind: `plugin:${skillSourcePrefix}${skill.name}`, form: 'instructions' }));
     loadedNames.add(request.name);
     used += text.length;
     outcomes.push({ ruleId: request.ruleId, status: 'applied' });

@@ -20,7 +20,7 @@ test('selected skill loads through the agent scope and does not duplicate user-e
   });
   assert.equal(result.messages.length, 1);
   assert.match(result.messages[0].content[0].text, /review body/);
-  assert.equal(result.messages[0].source.plugin, 'dsh-jev-context-gate/skill/review');
+  assert.equal(result.messages[0].source.kind, 'plugin:dsh-jev-context-gate/skill/review');
   assert.deepEqual(result.outcomes.map(row => row.status), ['applied', 'already-loaded', 'already-loaded']);
   assert.equal(lookups[0].scope, agent);
   assert.equal(lookups[0].cwd, '/workspace');
@@ -28,7 +28,7 @@ test('selected skill loads through the agent scope and does not duplicate user-e
 
 test('visible durable skill content prevents reinjection until removed from the surface', async () => {
   const events = new Map([
-    [2, { type: 'user/message', data: { source: { kind: 'plugin', plugin: 'dsh-jev-context-gate/skill/review' } } }],
+    [2, { type: 'user/message', data: { source: { kind: 'plugin:dsh-jev-context-gate/skill/review' } } }],
     [3, { type: 'user/message', data: { source: { kind: 'skill-invocation', name: 'private' } } }],
   ]);
   const sessionAgent = { session: { header: { cwd: '/workspace' }, surface: { nodes: [2, 3] }, eventAt: seq => events.get(seq) } };

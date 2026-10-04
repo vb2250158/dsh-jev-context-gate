@@ -18,7 +18,7 @@ export { Config, DEFAULT_SETTINGS, SETTINGS_NAMESPACE, SettingsSchema } from './
 export { evaluatePolicy } from './policy.mjs';
 export const name = 'dsh-jev-context-gate';
 export const inject = ['settings', 'llm', 'skills', 'tools'];
-const contextMessage = (text, source = { kind: 'plugin', plugin: name, form: 'instructions' }) => createUserMessage({ content: [{ type: 'text', text }], source });
+const contextMessage = (text, source = { kind: `plugin:${name}`, form: 'instructions' }) => createUserMessage({ content: [{ type: 'text', text }], source });
 const selectedText = (rule, selected) => {
   const items = selected.map(entry => `- ${entry.description}`).join('\n');
   return rule.selectionAction === 'inject-extra' ? rule.selectionActionText.replaceAll('{selected}', items)
@@ -26,7 +26,8 @@ const selectedText = (rule, selected) => {
 };
 
 export function apply(ctx, config = {}) {
-  const scope = ctx.settings.register(SETTINGS_NAMESPACE, SettingsSchema, { base: { ...DEFAULT_SETTINGS, ...Config(config) } });
+  const scope = { get: () => config.get() };
+  ctx.effect(() => ctx.settings.configure({ auto: false }, ctx.fiber));
   const capabilities = createCapabilityRegistry();
   const internalCalls = new Set();
   const pendingQuestions = new Set();

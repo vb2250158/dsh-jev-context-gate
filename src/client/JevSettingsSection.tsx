@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Button, Menu, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ModelCatalog } from '@deepseek-ai/dsh-api-remotes/client'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import styles from './JevSettingsSection.module.css'
 import { modeForModel } from '../mode.mjs'
 import { validateRules } from '../policy.mjs'
@@ -11,7 +11,7 @@ import { JevRuleEditor } from './JevRuleEditor.tsx'
 import type { DraftRule, Rule } from './JevRuleEditor.tsx'
 
 export type Settings = { enabled: boolean; provider: string; model: string; nativeJev: boolean; beforeEnabled: boolean; afterEnabled: boolean; maxContextCharacters: number; maxCorrections: number; presetVersion: number; rules: Rule[] }
-type Injected = { scope: SettingsScope<Settings>; loadCatalog: () => Promise<ModelCatalog> }
+type Injected = { scope: ConfigForm<Settings>; loadCatalog: () => Promise<ModelCatalog> }
 export type JevSettingsSectionProps = Partial<Injected> & { close?: () => void }
 
 const toDraft = (rules: Rule[]): DraftRule[] =>

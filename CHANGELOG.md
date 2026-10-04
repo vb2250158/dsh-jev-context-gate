@@ -1,5 +1,9 @@
 # 更新记录
 
+## 0.1.23
+
+- Update DSH compatibility requirements and interfaces for 0.2.1-alpha.1.
+
 ## 0.1.22
 
 - 修正扩展事件选项行为：仅“裁剪”替换返回参数，“注入额外内容”保留原候选并继续返回入选结果；事件候选允许只有一项。
