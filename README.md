@@ -4,7 +4,7 @@ This release requires DSH 0.2.1-alpha.1 or a compatible 0.2 release. See [compat
 
 [English](README_en.md) | 简体中文
 
-DSH 的智能规则插件（包名 `dsh-jev-context-gate`）。设置 → 智能规则可配置事件判断、内容筛选和动作执行；DSH 0.2 的配置按插件入口 ID `dsh-jev-context-gate` 读写。选择独立判定模型后，按事件读取待判断内容、提出选择题，并执行获选选项配置的行为。普通模型使用 LLM JSON 估计选项概率；型号以 `jev-` 开头时标为 Jev 原生，原生结构化调用仍需模型提供商接入。
+DSH 的智能规则插件（包名 `dsh-jev-context-gate`）。插件 → 智能规则 → 配置可配置事件判断、内容筛选和动作执行；DSH 0.2 的配置按插件入口 ID `dsh-jev-context-gate` 读写。选择独立判定模型后，按事件读取待判断内容、提出选择题，并执行获选选项配置的行为。普通模型使用 LLM JSON 估计选项概率；型号以 `jev-` 开头时标为 Jev 原生，原生结构化调用仍需模型提供商接入。
 
 ## 0.1.22
 
@@ -111,3 +111,7 @@ MIT
 ## Plugin display metadata
 
 The plugin list shows **Smart rules** in English and **智能规则** in Chinese, following the DSH interface language. `locale/en.json` and `locale/zh.json` provide the title and description; `icon.svg` supplies self-contained artwork. The package exports and publishes these resources. The icon is adapted from Lucide; see [ICON_LICENSE.txt](ICON_LICENSE.txt).
+
+## 插件设置入口
+
+在插件列表中点击本插件进入详情页，即可使用原有配置和操作界面；设置菜单不再重复显示该插件入口。

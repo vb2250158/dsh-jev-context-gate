@@ -101,3 +101,7 @@ MIT
 ## Plugin display metadata
 
 The plugin list shows **Smart rules** in English and **智能规则** in Chinese, following the DSH interface language. `locale/en.json` and `locale/zh.json` provide the title and description; `icon.svg` supplies self-contained artwork. The package exports and publishes these resources. The icon is adapted from Lucide; see [ICON_LICENSE.txt](ICON_LICENSE.txt).
+
+## Plugin configuration
+
+Open this plugin from the Plugins list to access its existing configuration and controls. Settings no longer duplicates its navigation entry.
