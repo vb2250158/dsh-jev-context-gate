@@ -97,3 +97,7 @@ Publish source and tag, verify the remote SHA, update the pinned SHA and version
 Native Jev structured calls still need a provider adapter. Generic probabilities are uncalibrated. A streamed reminder cannot retract text already displayed. The plugin does not verify factual claims.
 
 MIT
+
+## Plugin display metadata
+
+The plugin list shows **Smart rules** in English and **智能规则** in Chinese, following the DSH interface language. `locale/en.json` and `locale/zh.json` provide the title and description; `icon.svg` supplies self-contained artwork. The package exports and publishes these resources. The icon is adapted from Lucide; see [ICON_LICENSE.txt](ICON_LICENSE.txt).

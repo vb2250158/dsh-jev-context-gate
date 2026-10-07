@@ -107,3 +107,7 @@ npm pack --dry-run
 Jev 原生结构化调用尚未接入；普通模型返回的概率未经校准。追加提醒不能阻止此前已经流式显示的文字。插件不会验证模型给出的事实结论。
 
 MIT
+
+## Plugin display metadata
+
+The plugin list shows **Smart rules** in English and **智能规则** in Chinese, following the DSH interface language. `locale/en.json` and `locale/zh.json` provide the title and description; `icon.svg` supplies self-contained artwork. The package exports and publishes these resources. The icon is adapted from Lucide; see [ICON_LICENSE.txt](ICON_LICENSE.txt).

@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.1.29 (2026-10-07)
+
+- 为插件列表提供中英文名称与说明，并发布独立的 SVG 图标。
+- Publish English and Chinese plugin display metadata and a dedicated SVG icon.
+
 ## 0.1.28
 
 - 浏览器从共享设置镜像读取规则，使用插件自带的规则校验与迁移代码；保存继续使用 DSH 的有序写入和版本检查，修复 JSON 传输无法携带规则校验函数导致的页面不可用。
