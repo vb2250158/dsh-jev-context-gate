@@ -105,3 +105,5 @@ The plugin list shows **Smart rules** in English and **智能规则** in Chinese
 ## Plugin configuration
 
 Open this plugin from the Plugins list to access its existing configuration and controls. Settings no longer duplicates its navigation entry.
+
+The icon uses a centered 36 × 36 viewBox to leave more space around the artwork inside the plugin icon frame.
