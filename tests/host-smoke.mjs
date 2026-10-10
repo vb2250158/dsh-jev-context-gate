@@ -80,7 +80,7 @@ export function apply(ctx) {
   assert.ok(original.includes('"id":222'));
   assert.ok(original.includes('"revision":29'));
   const copied = Session.create(SessionId('copied-state'));
-  copied.append('user/message', active);
+  copied.append('user/message', active, {surfaceOp:'append'});
   const copy = readContext(copied, {seq:0}, 1000000, {joinContextSections});
   assert.equal(copy.content, original);
   assert.equal(active.source.contextPolicy.originalText, undefined);
