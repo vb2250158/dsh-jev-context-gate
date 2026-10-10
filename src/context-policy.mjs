@@ -28,15 +28,36 @@ export function renderContext(message, sourceSeq, settings) {
   const reference = `\n\n完整内容：context_read({"seq":${sourceSeq},"offset":0})；总计 ${original.length} 字符。`;
   if (message.source.form === 'catalog' && Array.isArray(message.source.entries)) {
     const content = message.source.entries.map(entry => `${entry.name}: ${entry.description.slice(0, settings.catalogDescriptionCharacters)}`).join('\n');
-    return content.length < original.length ? `可用技能目录；按名称调用 skill 加载正文。\n${content}${reference}` : original;
+    const candidate = `当前目录（${message.source.kind}），替代同来源与上下文键的旧版本。\n${content}${reference}`;
+    return candidate.length < original.length ? candidate : original;
   }
   if (original.length <= settings.maxSnapshotCharacters) return original;
   const sections = message.source.sections;
   let content = Array.isArray(sections) ? sections.map(section => `[${section.name}]\n${sectionPreview(section.text, settings.previewItems)}`).join('\n\n')
     : sectionPreview(original, settings.previewItems);
-  const limit = settings.maxSnapshotCharacters - reference.length;
+  const heading = '当前状态快照，替代同来源与上下文键的旧版本。\n';
+  const limit = settings.maxSnapshotCharacters - reference.length - heading.length;
   if (content.length > limit) return original;
-  return content + reference;
+  return heading + content + reference;
+}
+
+/** Resolve an original only within its session; copied views carry their complete captured text. */
+function originalContext(session, seq, message, joinContextSections) {
+  const previous = message.source.contextPolicy;
+  if (!previous) return { raw: message, sourceSeq: seq };
+  const local = previous.sessionId === undefined || previous.sessionId === session.id;
+  const event = local ? session.eventAt(previous.sourceSeq) : undefined;
+  const matching = event?.type === 'user/message' && contextKey(event.data) === contextKey(message);
+  const sourceSeq = matching ? previous.sourceSeq : seq;
+  if (matching && !event.data.source.contextPolicy) return { raw: event.data, sourceSeq };
+  const originalText = typeof previous.originalText === 'string' ? previous.originalText
+    : message.source.kind === 'runtime-context' && Array.isArray(message.source.sections) && joinContextSections
+      ? joinContextSections(message.source.sections) : undefined;
+  if (originalText !== undefined) {
+    const { contextPolicy: _previous, ...source } = message.source;
+    return { raw: { ...message, source, content: [{ type: 'text', text: originalText }] }, sourceSeq };
+  }
+  return { raw: undefined, sourceSeq };
 }
 
 /** Shared pressure policy uses the actual admitted model, without model-name overrides. */
@@ -51,28 +72,36 @@ export function pressurePolicy(contextWindow, reservedCompletionTokens, settings
 }
 
 /** Log each retirement/re-render immediately after its exact shadow price. */
-export function reconcileContext(agent, position, meter, settings, { createUserMessage, createDeveloperMessage }) {
+export function reconcileContext(agent, position, meter, settings, { createUserMessage, createDeveloperMessage, joinContextSections }) {
   const session = agent.session;
   const entries = session.surface.nodes.map(seq => ({ seq, event: session.eventAt(seq) }))
     .filter(entry => entry.event?.type === 'user/message' && contextKey(entry.event.data) !== undefined);
-  const latest = new Map(entries.map(entry => [contextKey(entry.event.data), entry.seq]));
+  const latest = new Map();
+  for (const entry of entries) {
+    const key = contextKey(entry.event.data);
+    const version = originalContext(session, entry.seq, entry.event.data).sourceSeq;
+    if (!latest.has(key) || version > latest.get(key).version) latest.set(key, { seq: entry.seq, version });
+  }
   let retired = 0, rendered = 0;
   for (const { seq, event } of entries) {
     const message = event.data, key = contextKey(message);
     const previous = message.source.contextPolicy;
-    const raw = previous?.sourceSeq === undefined ? message : session.eventAt(previous.sourceSeq)?.data;
-    if (!raw?.content) throw new Error(`上下文原文不存在：${previous?.sourceSeq}`);
     let replacement;
-    if (latest.get(key) !== seq) {
+    if (latest.get(key).seq !== seq) {
       replacement = { type: 'developer/message', data: { ...position,
         message: createDeveloperMessage({ content: [], source: { kind: 'plugin:dsh-jev-context-gate' } }) } };
       retired += 1;
     } else if (message.content.every(block => block.type === 'text')) {
-      const sourceSeq = previous?.sourceSeq ?? seq;
+      const { raw, sourceSeq } = originalContext(session, seq, message, joinContextSections);
+      // Legacy copied views without their original remain visible until the producer refreshes.
+      if (!raw) continue;
       const content = renderContext(raw, sourceSeq, settings);
-      if (content === textOf(message)) continue;
+      const structuredRuntime = raw.source.kind === 'runtime-context' && Array.isArray(raw.source.sections) && joinContextSections;
+      if (content === textOf(message) && (!previous || (previous.originalText !== undefined || structuredRuntime)
+        && previous.sessionId === session.id)) continue;
       replacement = { type: 'user/message', data: createUserMessage({ content: [{ type: 'text', text: content }],
-        source: { ...raw.source, contextPolicy: { sourceSeq } } }) };
+        source: { ...raw.source, contextPolicy: { sourceSeq, ...(structuredRuntime ? {} : {originalText: textOf(raw)}),
+          ...(session.id === undefined ? {} : { sessionId: session.id }) } } }) };
       rendered += 1;
     } else continue;
     session.append('compaction/prune', { shadowedRange: { start: seq, end: seq },
@@ -83,18 +112,17 @@ export function reconcileContext(agent, position, meter, settings, { createUserM
 }
 
 /** Read one exact logged context page. The caller supplies its own live session. */
-export function readContext(session, args, maximum) {
+export function readContext(session, args, maximum, { joinContextSections } = {}) {
   const event = session.eventAt(args.seq);
   if (event?.type !== 'user/message' || contextKey(event.data) === undefined) throw new Error('此序号不是当前会话中的可查询上下文。');
-  const original = event.data.source.contextPolicy?.sourceSeq;
-  const message = original === undefined ? event.data : session.eventAt(original)?.data;
-  if (!message?.content) throw new Error('上下文原文不存在。');
+  const { raw: message, sourceSeq } = originalContext(session, args.seq, event.data, joinContextSections);
+  if (!message) throw new Error('源全文不在当前会话；请刷新该来源的上下文后读取。');
   const text = textOf(message), offset = args.offset ?? 0;
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > text.length
     || offset > 0 && /[\uD800-\uDBFF]/.test(text[offset - 1])) throw new Error('无效的上下文分页位置。');
   let end = Math.min(text.length, offset + maximum);
   if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) end -= 1;
-  return { seq: original ?? args.seq, offset, totalCharacters: text.length, content: text.slice(offset, end),
+  return { seq: sourceSeq, offset, totalCharacters: text.length, content: text.slice(offset, end),
     nextOffset: end < text.length ? end : null };
 }
 
@@ -127,7 +155,7 @@ export function installContextPolicy(ctx, getSettings, builders) {
     async execute(args, exec) {
       if (!exec.agent || !Number.isSafeInteger(args.seq) || args.seq < 0) throw new Error('读取上下文需要当前 Agent 和有效序号。');
       const settings = getSettings().contextPolicy ?? DEFAULT_CONTEXT_POLICY;
-      const result = readContext(exec.agent.session, args, settings.detailPageCharacters);
+      const result = readContext(exec.agent.session, args, settings.detailPageCharacters, builders);
       return JSON.stringify(result);
     },
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },

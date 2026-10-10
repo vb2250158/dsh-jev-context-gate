@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.1.35
+
+- 最新状态依据发布序号确定，兼容表面头部替换；复制会话保留完整原文并重绑查询序号。
+- 目录不假定资源类型，也不扩张已简短的输入；预览明确替代旧状态。
+- Order state by publication and preserve complete captured text across session copies; keep catalogs generic and avoid expanding short input.
+
 ## 0.1.34
 
 - 安装组合显式声明 tokenMeter，与插件依赖保持一致；宿主补丁说明符合文档预算。

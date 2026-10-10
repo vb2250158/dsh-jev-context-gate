@@ -12,6 +12,7 @@ function history(messages) {
       const event = { type, seq: events.length, data, ...intent };
       events.push(event);
       if (intent?.surfaceOp?.op === 'replace') nodes.splice(nodes.indexOf(intent.surfaceOp.startSeq), 1, event.seq);
+      else if (type === 'user/message') nodes.push(event.seq);
       return event;
     } };
 }
@@ -21,6 +22,32 @@ const builders = { createUserMessage: value => ({ role: 'user', ...value }), cre
 test('unstructured state and trailing authorization are never truncated', () => {
   const text = 'state fact '.repeat(2000) + 'External actions still need authorization.';
   assert.equal(renderContext(snapshot(text), 0, settings), text);
+});
+
+test('latest publication survives a replacement at the surface head', () => {
+  const session = history([snapshot('first'), snapshot('older tail')]);
+  session.append('user/message', snapshot('latest'), { surfaceOp: { op: 'replace', startSeq: 0, endSeq: 0 } });
+  reconcileContext({ session }, { turn: 1, step: 1 }, meter, settings, builders);
+  assert.ok(session.surface.nodes.includes(2));
+  assert.ok(!session.surface.nodes.includes(1));
+});
+
+test('copied views read their captured full text and yield to a new local publication', () => {
+  const parent = history([snapshot(JSON.stringify({ items: Array.from({length:100}, (_,i) => ({id:i,text:'detail '.repeat(100)})) }))]);
+  parent.id = 'parent';
+  reconcileContext({session:parent}, {turn:1,step:1}, meter, settings, builders);
+  const view = parent.events.at(-1).data;
+  const child = history([view]); child.id = 'child';
+  assert.equal(readContext(child, {seq:0}, 100000).content, parent.events[0].data.content[0].text);
+  child.append('user/message', snapshot('new child state'));
+  reconcileContext({session:child}, {turn:1,step:1}, meter, settings, builders);
+  assert.ok(child.surface.nodes.includes(1));
+  assert.ok(!child.surface.nodes.includes(0));
+});
+
+test('already short catalogs are never expanded by the query footer', () => {
+  const message = { ...snapshot('tiny catalog'), source: {kind:'test',form:'catalog',entries:[{name:'a',description:'b'}]} };
+  assert.equal(renderContext(message, 0, settings), 'tiny catalog');
 });
 
 test('snapshot updates retire only their own key, preserve user instructions and retain the original', () => {

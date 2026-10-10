@@ -11,7 +11,8 @@ const root = resolve(process.env.DSH_SOURCE_ROOT);
 const plugin = dirname(dirname(fileURLToPath(import.meta.url)));
 const native = (group, name) => pathToFileURL(join(root, 'packages', group, name, 'lib/index.js')).href;
 const { boot } = await import(native('boot', 'app-boot'));
-const { SessionId } = await import(native('core', 'session'));
+const { Session, SessionId } = await import(native('core', 'session'));
+const { joinContextSections } = await import(native('core', 'system-prompt'));
 const { createUserMessage } = await import(native('llm', 'llm'));
 const dir = await mkdtemp(join(tmpdir(), 'dsh-context-policy-'));
 let ctx;
@@ -19,6 +20,7 @@ try {
   const fixture = `
 import { LlmAdapter, createUserMessage, createDeveloperMessage } from ${JSON.stringify(native('llm', 'llm'))};
 import { defineTool } from ${JSON.stringify(native('core', 'tools'))};
+import { joinContextSections } from ${JSON.stringify(native('core', 'system-prompt'))};
 import { installContextPolicy, DEFAULT_CONTEXT_POLICY } from ${JSON.stringify(pathToFileURL(join(plugin, 'src/context-policy.mjs')).href)};
 export const inject = ['agentLoop', 'tools', 'tokenMeter', 'llm', 'systemPrompt'];
 export function apply(ctx) {
@@ -37,7 +39,7 @@ export function apply(ctx) {
   ctx.effect(() => ctx.systemPrompt.context({ name: 'plans', order: 1,
     text: () => JSON.stringify({ revision: state.revision, pending: Array.from({ length: 223 }, (_, i) => ({ id: i, text: 'detail '.repeat(70) })) }) }));
   ctx.effect(() => ctx.systemPrompt.context({ name: 'authorization', order: 2, text: 'User authorization remains required for external messages.' }));
-  installContextPolicy(ctx, () => ({ contextPolicy: DEFAULT_CONTEXT_POLICY }), { createUserMessage, createDeveloperMessage, defineTool });
+  installContextPolicy(ctx, () => ({ contextPolicy: DEFAULT_CONTEXT_POLICY }), { createUserMessage, createDeveloperMessage, defineTool, joinContextSections });
 }
 `;
   await writeFile(join(dir, 'fixture.mjs'), fixture);
@@ -77,6 +79,11 @@ export function apply(ctx) {
   do { const page = readContext(agent.session, { seq: originalSeq, offset }, 4096); original += page.content; offset = page.nextOffset; } while(offset !== null);
   assert.ok(original.includes('"id":222'));
   assert.ok(original.includes('"revision":29'));
+  const copied = Session.create(SessionId('copied-state'));
+  copied.append('user/message', active);
+  const copy = readContext(copied, {seq:0}, 1000000, {joinContextSections});
+  assert.equal(copy.content, original);
+  assert.equal(active.source.contextPolicy.originalText, undefined);
   const inputSnapshot = {
     requests: ctx.contextFixture.requests.length,
     activeSnapshots: snapshots.length,

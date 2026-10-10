@@ -1,6 +1,7 @@
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { installContextPolicy } from './context-policy.mjs';
 import { createUserMessage, createDeveloperMessage } from '@deepseek-ai/dsh-llm';
+import { joinContextSections } from '@deepseek-ai/dsh-system-prompt';
 import { escapeText, renderSkillContent } from '@deepseek-ai/dsh-skill';
 import { Config, DEFAULT_SETTINGS, SETTINGS_NAMESPACE, SettingsSchema } from './settings.mjs';
 import { judge } from './judge.mjs';
@@ -29,7 +30,7 @@ const selectedText = (rule, selected) => {
 
 export function apply(ctx, config = {}) {
   const scope = { get: () => config.get() };
-  installContextPolicy(ctx, () => scope.get(), { createUserMessage, createDeveloperMessage, defineTool });
+  installContextPolicy(ctx, () => scope.get(), { createUserMessage, createDeveloperMessage, defineTool, joinContextSections });
   ctx.effect(() => ctx.settings.configure({ auto: false }, ctx.fiber));
   const capabilities = createCapabilityRegistry();
   const internalCalls = new Set();
