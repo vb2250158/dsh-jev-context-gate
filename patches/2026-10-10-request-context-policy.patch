@@ -307,98 +307,98 @@ diff --git a/packages/compaction/compaction-basic/tests/compaction-loop-repro.sp
 diff --git a/packages/core/agent/README.md b/packages/core/agent/README.md
 --- a/packages/core/agent/README.md
 +++ b/packages/core/agent/README.md
-@@ -10,6 +10,8 @@
- ## Summary
+@@ -70,6 +70,8 @@
  
- Use `dsh-agent` to create or resume live agents, send follow-up or steering input, inject model-facing context, cancel work, and wait for idle completion. Plugins, UI, hooks, and orchestrators can also observe or intercept agent activity and apply capabilities to one agent without affecting others. Choose it when code needs to control or extend live agents through the public `Agent` API. Pair it with an agent driver such as `dsh-agent-loop`; this package does not create model requests by itself. Initiator attribution is process-local and must be carried explicitly across workers, processes, durable queues, and restarts.
+ <a id="understand-the-implementation"></a>
+ ## Understand the implementation
 +
 +`agent/request-context` reconciles the complete durable input and registration-bound request context before the loop freezes model history. Listeners commit logged replacements and delegate with `next()`. Cancellation retains admitted facts; failures prevent dispatch.
  
- ## Table of Contents
- 
+ <details>
+ <summary>Implementation internals — click to expand</summary>
 diff --git a/packages/core/agent/README.zh.md b/packages/core/agent/README.zh.md
 --- a/packages/core/agent/README.zh.md
 +++ b/packages/core/agent/README.zh.md
-@@ -10,6 +10,8 @@
- ## 概述
+@@ -70,6 +70,8 @@
  
- 使用 `dsh-agent` 创建或恢复实时 agent（智能体）、发送后续或 steering（中途引导）输入、注入面向模型的上下文、取消工作，并等待 agent 进入空闲状态。插件、UI、钩子与编排器还可以观察或拦截 agent 活动，并仅为一个 agent 应用能力而不影响其他 agent。当代码需要通过公开 `Agent` API 控制或扩展实时 agent 时，请选择本包。请将它与 `dsh-agent-loop` 等 agent 驱动器配合使用；本包本身不会创建模型请求。发起方归因仅存在于进程内，跨 worker、进程、持久队列与重启时必须显式传递。
+ <a id="understand-the-implementation"></a>
+ ## 理解实现
 +
 +`agent/request-context` 在完整输入及本次路由元数据入日志后、模型历史冻结前执行。监听者通过日志记录替换并调用 `next()`。取消保留已接纳事实，失败阻止发送。
  
- ## 目录
- 
+ <details>
+ <summary>实现细节——点击展开</summary>
 diff --git a/packages/core/agent-loop/README.md b/packages/core/agent-loop/README.md
 --- a/packages/core/agent-loop/README.md
 +++ b/packages/core/agent-loop/README.md
-@@ -10,6 +10,8 @@
- ## Summary
+@@ -79,6 +79,8 @@
+ <a id="understand-the-implementation"></a>
+ ## Understand the implementation
  
- `dsh-agent-loop` creates fresh agents or resumes persisted sessions, then drives each turn through model requests, streamed responses, tool execution, and durable session history. Mount it for standard agent compositions; declarative entries start agents at boot, while the public `ctx.agents` API supports programmatic creation and resume. `maxParallelToolCalls` limits concurrent parallel-safe calls, and exclusive calls retain ordering. Cancellation preserves streamed text already delivered to the user. Choose a custom `Agent` implementation only when the standard "call model, run tools, repeat" lifecycle is insufficient.
-+
 +`requestContextVersion` identifies the driver’s complete-request reconciliation support. After admitted users, system prompt, tools, and bound capacity are logged, `agent/request-context` runs before request freezing; surface changes start a new logged request series. Runtime snapshots compare their original contributed sections so a compact view does not cause unchanged state to be reinjected.
- 
- ## Table of Contents
++
+ <details>
+ <summary>Implementation internals — click to expand</summary>
  
 diff --git a/packages/core/agent-loop/README.zh.md b/packages/core/agent-loop/README.zh.md
 --- a/packages/core/agent-loop/README.zh.md
 +++ b/packages/core/agent-loop/README.zh.md
-@@ -10,6 +10,8 @@
- ## 概述
+@@ -79,6 +79,8 @@
+ <a id="understand-the-implementation"></a>
+ ## 理解实现
  
- `dsh-agent-loop` 创建全新 agent 或恢复持久化会话，随后通过模型请求、流式响应、工具执行和持久会话历史驱动每个轮次。标准 agent 组合应挂载本包；声明式条目会在启动时启动 agent，公开的 `ctx.agents` API 则支持以编程方式创建和恢复 agent。`maxParallelToolCalls` 限制同时运行的并行安全调用数量，独占调用保留顺序。取消会保留已经流式交付给用户的文本。只有标准的「调用模型、运行工具、重复」生命周期无法满足需求时，才应选择自定义 `Agent` 实现。
-+
 +`requestContextVersion` 标识驱动支持的完整请求检查版本。用户输入、系统提示、工具和本次路由容量入日志后，`agent/request-context` 在请求冻结前执行；替换触发新的请求序列。运行时快照按原始贡献比较版本，缩短呈现不会导致相同状态反复注入。
- 
- ## 目录
++
+ <details>
+ <summary>实现细节——点击展开</summary>
  
 diff --git a/packages/compaction/compaction/README.md b/packages/compaction/compaction/README.md
 --- a/packages/compaction/compaction/README.md
 +++ b/packages/compaction/compaction/README.md
-@@ -10,6 +10,8 @@
- ## Summary
+@@ -58,6 +58,8 @@
  
- `dsh-compaction` lets a long session condense its older history into a single summary message, keep the recent conversation intact, and continue as if the summary had always been there — with a backend such as `dsh-compaction-basic` and the optional `/compact` command. The shadowed content stays in the session log, so replaying the session deterministically reproduces the same condensed conversation. Reach for this package when you implement a condensation backend, build something that triggers condensation, or need to recognize condensed messages — it performs no condensation itself. Choose the shipped backend when you want the feature working out of the box.
+ <a id="understand-the-implementation"></a>
+ ## Understand the implementation
 +
 +`compaction/pressure-policy` resolves trigger, target, and retained-tail token budgets for one admitted request. Policy providers preserve `0 <= retainTokens < targetTokens <= thresholdTokens` and reserve the effective output budget. The complete request capacity comes from its bound preparation.
  
- ## Table of Contents
- 
+ <details>
+ <summary>Implementation internals — click to expand</summary>
 diff --git a/packages/compaction/compaction/README.zh.md b/packages/compaction/compaction/README.zh.md
 --- a/packages/compaction/compaction/README.zh.md
 +++ b/packages/compaction/compaction/README.zh.md
-@@ -10,6 +10,8 @@
- ## 概述
+@@ -58,6 +58,8 @@
  
- `dsh-compaction` 让长时会话把较早历史压缩（compaction）成一条摘要消息、保持近期对话不变，并像摘要一直存在那样继续下去——配合 `dsh-compaction-basic` 之类的后端与可选的 `/compact` 命令即可实现。被遮蔽的内容仍保留在会话日志中，因此回放会话时能确定性地重现同一份压缩后的对话。当你实现压缩后端、构建触发压缩的组件，或需要识别压缩后的消息时，才需要本包——它本身不执行任何压缩。想开箱即用地获得该功能时，请选择随附后端。
+ <a id="understand-the-implementation"></a>
+ ## 理解实现
 +
 +`compaction/pressure-policy` 为已接纳请求提供触发、压缩目标和尾部保留预算。策略保证 `0 <= retainTokens < targetTokens <= thresholdTokens` 并预留有效输出额度；容量取自本次绑定的请求准备结果。
  
- ## 目录
- 
+ <details>
+ <summary>实现细节——点击展开</summary>
 diff --git a/packages/compaction/compaction-basic/README.md b/packages/compaction/compaction-basic/README.md
 --- a/packages/compaction/compaction-basic/README.md
 +++ b/packages/compaction/compaction-basic/README.md
-@@ -10,6 +10,8 @@
- ## Summary
+@@ -94,6 +94,8 @@
+ <a id="understand-the-implementation"></a>
+ ## Understand the implementation
  
- This package keeps long agent conversations working near the model's context limit. As token pressure builds, it condenses the oldest history into a summary while preserving recent messages; after a context-overflow error, it condenses and retries. You can also request condensation with `/compact` and optionally trim oversized tool outputs first. Condensation uses one extra model request and retains only its summary text. It cannot reduce the system prompt, tools, or session prefix, or split one indivisible unit such as a single huge tool call.
-+
 +Automatic pressure runs after complete request admission through `agent/request-context`, after downstream context reconciliation. An optional `compaction/pressure-policy` listener replaces the configured trigger, target, and retained-tail budgets. Bound request capacity is reused without a second model lookup. Condensation must reach the policy target; ordinary summary failures remain warnings and canonical overflow recovery stays available.
- 
- ## Table of Contents
++
+ <details>
+ <summary>Implementation internals — click to expand</summary>
  
 diff --git a/packages/compaction/compaction-basic/README.zh.md b/packages/compaction/compaction-basic/README.zh.md
 --- a/packages/compaction/compaction-basic/README.zh.md
 +++ b/packages/compaction/compaction-basic/README.zh.md
-@@ -10,6 +10,8 @@
- ## 概述
+@@ -94,6 +94,8 @@
+ <a id="understand-the-implementation"></a>
+ ## 理解实现
  
- 本包让长时 agent（智能体）会话在接近模型上下文上限时仍能正常工作。token 压力上升时，它会把最旧的历史压缩为摘要并保留近期消息；上下文溢出错误发生后，它会压缩并重试。你也可以通过 `/compact` 按需压缩，并选择先修剪超大工具输出。压缩使用一次额外的模型请求，并且只保留该请求返回的摘要文本。它无法缩减系统提示词、工具或会话前缀，也无法拆分单个不可分单元（例如一次超大工具调用）。
-+
 +自动压力检查通过 `agent/request-context` 在完整输入接纳及下游上下文整理之后执行。可选 `compaction/pressure-policy` 监听者提供触发、压缩目标及尾部保留预算。容量复用本次请求准备结果，避免再次查询模型。摘要需达到目标；普通摘要失败仍记录警告，真实上下文溢出的恢复保持可用。
- 
- ## 目录
++
+ <details>
+ <summary>实现细节——点击展开</summary>
  
 diff --git a/docs/architecture.md b/docs/architecture.md
 --- a/docs/architecture.md
@@ -407,7 +407,7 @@ diff --git a/docs/architecture.md b/docs/architecture.md
       agent/request -> prepareCall (cancellation commits neither system nor users)
       reconcile system/message using the prepared call capability
       append entered messages as user/message; log request/header and request/context as needed
-+     agent/request-context -> logged surface policy and compaction
++     agent/request-context
       derive and freeze model history from the log
       stream the bound prepared call -> llm/stream -> agent/assistant-stream start
         agent/assistant-stream chunk*
@@ -418,7 +418,7 @@ diff --git a/docs/architecture.zh.md b/docs/architecture.zh.md
       agent/request -> prepareCall (cancellation commits neither system nor users)
       reconcile system/message using the prepared call capability
       append entered messages as user/message; log request/header and request/context as needed
-+     agent/request-context -> logged surface policy and compaction
++     agent/request-context
       derive and freeze model history from the log
       stream the bound prepared call -> llm/stream -> agent/assistant-stream start
         agent/assistant-stream chunk*
