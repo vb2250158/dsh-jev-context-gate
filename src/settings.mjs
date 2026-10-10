@@ -1,4 +1,5 @@
 import z from '@deepseek-ai/schemastery';
+import { DEFAULT_CONTEXT_POLICY } from './context-policy.mjs';
 
 export const SETTINGS_NAMESPACE = 'jev-context-gate';
 const commonRuleFields = { toolName: '',
@@ -45,6 +46,17 @@ const ruleSchema = z.object({
   threshold: z.number().min(0).max(1).default(0.8), context: z.string().default(''),
 });
 const fields = {
+  contextPolicy: z.object({
+    enabled: z.boolean().default(true),
+    headroomRatio: z.number().min(0).max(0.25).default(DEFAULT_CONTEXT_POLICY.headroomRatio),
+    thresholdRatio: z.number().min(0.1).max(0.95).default(DEFAULT_CONTEXT_POLICY.thresholdRatio),
+    targetRatio: z.number().min(0.1).max(0.8).default(DEFAULT_CONTEXT_POLICY.targetRatio),
+    retainRatio: z.number().min(0).max(0.5).default(DEFAULT_CONTEXT_POLICY.retainRatio),
+    maxSnapshotCharacters: z.number().step(1).min(1024).max(64000).default(DEFAULT_CONTEXT_POLICY.maxSnapshotCharacters),
+    catalogDescriptionCharacters: z.number().step(1).min(16).max(500).default(DEFAULT_CONTEXT_POLICY.catalogDescriptionCharacters),
+    previewItems: z.number().step(1).min(0).max(20).default(DEFAULT_CONTEXT_POLICY.previewItems),
+    detailPageCharacters: z.number().step(1).min(256).max(16000).default(DEFAULT_CONTEXT_POLICY.detailPageCharacters),
+  }).default({ ...DEFAULT_CONTEXT_POLICY }),
   enabled: z.boolean().default(false), provider: z.string().default(''), model: z.string().default(''),
   nativeJev: z.boolean().default(true), beforeEnabled: z.boolean().default(true), afterEnabled: z.boolean().default(true),
   maxContextCharacters: z.number().step(1).min(0).max(64000).default(12000),
@@ -53,6 +65,7 @@ const fields = {
   rules: z.array(ruleSchema).default(structuredClone(defaultRules)),
 };
 const normalize = value => {
+  if (value.contextPolicy.retainRatio >= value.contextPolicy.targetRatio) throw new TypeError('上下文保留比例必须小于压缩目标比例。');
   if (!Array.isArray(value.rules) || value.rules.length > 64) throw new TypeError('Expected at most 64 rules');
   const migrateAction = (action, rule) => {
     if (action.type !== 'notify-group' && action.type !== 'ask-group') return { ...action, params: action.params ?? [] };

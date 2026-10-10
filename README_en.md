@@ -4,6 +4,16 @@ English | [简体中文](README.md)
 
 Smart Rules for DSH (package `dsh-jev-context-gate`). Settings → 智能规则 configures event judgments, content selection, and actions; DSH 0.2 reads and writes configuration by the plugin entry ID `dsh-jev-context-gate`. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Model IDs starting with `jev-` are labeled native; structured native calls still require a provider adapter.
 
+## Context lifecycle policy
+
+State previews shorten structured arrays without truncating unparsed facts or authorization text. If the preview cannot meet its budget, the original remains for ordinary compaction.
+
+`contextPolicy` is enabled independently of model judgement. Snapshot and catalog identity is the session-local tuple of `source.kind`, `source.plugin`, `source.contextKey`, and `source.form`. Only the latest `snapshot` or `catalog` remains active; ordinary user messages and instructions are preserved. Producers with several values use distinct context keys. Metered empty developer replacements retire old nodes while preserving the original log. Large state receives array counts and previews; catalogs keep every name with shorter descriptions. `context_read` retrieves the exact original by logged sequence with pagination.
+
+Policy runs after the actual route, complete input, and tools have been logged, before pressure compaction. Thresholds use the smaller of the window fraction and capacity minus effective output reservation and proportional headroom. Compaction targets and verbatim retention scale with the remaining message budget. Defaults are threshold ratio `0.8`, headroom ratio `0.06`, target ratio `0.4`, retention ratio `0.16`, snapshot preview 12000 characters, catalog descriptions 96 characters, three preview items, and detail pages of 4096 characters. Configure these under `contextPolicy`. Output reservation remains adapter-declared; local output settings do not imply provider enforcement.
+
+Apply the [host patch](patches/2026-10-10-request-context-policy.patch) and rebuild the affected Host packages before enabling this policy. The patch supplies request reconciliation, bound capacity, pressure-policy hooks, and original snapshot recognition; this plugin owns policy. Follow the [patch instructions](patches/README.md), check the required baseline and preceding patches, then run `git apply --check`. Recheck after upstream updates. An unpatched driver rejects enabled policy; `contextPolicy.enabled: false` retains existing judge rules. Unload disposes tools and listeners; durable replacements remain replayable.
+
 ## 0.1.22
 
 External-event candidate parameters may contain a single item. `emit()` replaces a candidate parameter in the returned `parameters` only when the rule selects “Trim.” “Inject extra content” leaves that parameter intact and still returns the selected entries in `selections`. The event provider applies the returned parameters to the content it owns.

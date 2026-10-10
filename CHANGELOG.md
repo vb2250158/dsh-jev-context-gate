@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.1.32
+
+- 统一快照生命周期、完整请求预算和压缩目标；完整状态通过 context_read 分页查询。
+- 宿主补丁随插件发布，开启策略前检查驱动能力。
+- Shared snapshot lifecycle, admitted-request pressure budgets, and compaction targets; full detail is paged through context_read.
+- Ships and checks the required host patch.
+
 ## 0.1.31 (2026-10-07)
 
 - 缩小图标绘制内容约三分之一，增加方框内的留白。

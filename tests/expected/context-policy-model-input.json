@@ -1,0 +1,11 @@
+{
+  "requests": 31,
+  "activeSnapshots": 1,
+  "pendingTotal": 223,
+  "previewIds": [0, 1, 2],
+  "latestRevision": 29,
+  "unchangedStateReinjected": false,
+  "instructionsRetained": true,
+  "completeOriginalReadable": true,
+  "compactions": 0
+}

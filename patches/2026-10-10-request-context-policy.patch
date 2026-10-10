@@ -1,0 +1,441 @@
+diff --git a/packages/core/agent/src/runtime-types.ts b/packages/core/agent/src/runtime-types.ts
+--- a/packages/core/agent/src/runtime-types.ts
++++ b/packages/core/agent/src/runtime-types.ts
+@@ -352,6 +352,18 @@
+     */
+     'agent/request'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<LlmCallConfig>): Promise<LlmCallConfig>
+     /**
++     * Reconcile logged input before freezing the complete model request. Listeners
++     * may commit surface replacements; accepted input and the registration-bound
++     * route are already durable. Cancellation preserves those committed facts.
++     * Every listener delegates with `next()`; failures prevent model dispatch.
++     * @param payload.agent - agent owning the admitted request.
++     * @param payload.turn - open turn number.
++     * @param payload.step - open step number.
++     * @param payload.signal - turn cancellation signal.
++     * @mode waterfall
++     */
++    'agent/request-context'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<void>): Promise<void>
++    /**
+      * Handle one failed model-request attempt before the loop retries or closes
+      * its step. A listener returns `{ kind: 'retry' }` without calling `next()`
+      * when it owns recovery, or calls `next()` to delegate. The default
+diff --git a/packages/core/agent-loop/src/agent.ts b/packages/core/agent-loop/src/agent.ts
+--- a/packages/core/agent-loop/src/agent.ts
++++ b/packages/core/agent-loop/src/agent.ts
+@@ -458,7 +458,7 @@
+         }
+       }
+       firstAttempt = false
+-      const request = this.buildRequest(config, preparedCall, assembly.tools, { turn, step }, startsRequestSeries, signal)
++      const request = await this.buildRequest(config, preparedCall, assembly.tools, { turn, step }, startsRequestSeries, signal)
+       const live = new AssistantStreamAttempt(
+         this.session.id,
+         ++this.assistantAttemptCounter,
+@@ -632,14 +632,14 @@
+   }
+ 
+   /** Log the resolved envelope and derive a frozen request from the admitted surface. */
+-  private buildRequest(
++  private async buildRequest(
+     config: LlmCallConfig,
+     preparedCall: PreparedLlmCall | undefined,
+     tools: GenerateOptions['tools'] & object,
+     position: { turn: number; step: number },
+     startsRequestSeries: boolean,
+     signal: AbortSignal,
+-  ): GenerateOptions {
++  ): Promise<GenerateOptions> {
+     const { session } = this
+     const surfaceGeneration = session.surface.contentGeneration
+     const header = canonicalHeader({
+@@ -702,6 +702,14 @@
+     }
+     signal.throwIfAborted()
+ 
++    const admittedGeneration = session.surface.contentGeneration
++    await this.dispatch.waterfall('agent/request-context', { ...position, signal }, async () => {})
++    signal.throwIfAborted()
++    if (session.surface.contentGeneration !== admittedGeneration) {
++      session.append('request/header', { header, reason: 'series' })
++      this.requestSurfaceGeneration = session.surface.contentGeneration
++    }
++
+     // canonicalHeader is shallow; append logs a detached snapshot, not these local values.
+     deepFreeze(header)
+     const boundaryMessages = session.deriveMessages()
+diff --git a/packages/core/agent-loop/src/index.ts b/packages/core/agent-loop/src/index.ts
+--- a/packages/core/agent-loop/src/index.ts
++++ b/packages/core/agent-loop/src/index.ts
+@@ -328,6 +328,9 @@
+ 
+ /** Concrete agent factory and driver service. */
+ export class AgentLoop extends Service implements AgentFactory {
++  /** Version of the complete-request context reconciliation event supported by this driver. */
++  readonly requestContextVersion: 1 = 1
++
+   static inject = ['agents', 'sessions', 'llm', 'tools', 'systemPrompt', 'sessionProjections']
+ 
+   /** Runtime schema for declarative agents. */
+diff --git a/packages/core/agent-loop/src/runtime-context.ts b/packages/core/agent-loop/src/runtime-context.ts
+--- a/packages/core/agent-loop/src/runtime-context.ts
++++ b/packages/core/agent-loop/src/runtime-context.ts
+@@ -10,6 +10,7 @@
+ import type { Session, SessionEvent, SessionSeq, SurfaceIntent, SystemMessage, UserMessage } from '@deepseek-ai/dsh-session'
+ import { isReplacementSurfaceEvent } from '@deepseek-ai/dsh-session'
+ import type { Context } from '@deepseek-ai/cordis'
++import { joinContextSections } from '@deepseek-ai/dsh-system-prompt'
+ declare module '@deepseek-ai/dsh-llm' {
+   interface MessageSourceMap {
+     'runtime-context': { kind: 'runtime-context' } & ContextFormed
+@@ -24,6 +25,8 @@
+ }
+ 
+ function textOf(message: Message): string | undefined {
++  if (message.source.kind === SOURCE && message.source.form === 'snapshot'
++    && message.source.sections !== undefined) return joinContextSections(message.source.sections)
+   const [block] = message.content
+   return message.content.length === 1 && block?.type === 'text' ? block.text : undefined
+ }
+diff --git a/packages/compaction/compaction/src/index.ts b/packages/compaction/compaction/src/index.ts
+--- a/packages/compaction/compaction/src/index.ts
++++ b/packages/compaction/compaction/src/index.ts
+@@ -31,6 +31,16 @@
+ /** Why automatic policy is asking a backend to consider compaction. */
+ export type CompactionTrigger = 'pressure' | 'context-overflow'
+ 
++/** Concrete request-pressure budgets supplied by one compaction policy. */
++export interface CompactionPressurePolicy {
++  /** Request size at which automatic reduction starts. */
++  thresholdTokens: number
++  /** Request size automatic reduction must reach before it succeeds. */
++  targetTokens: number
++  /** Recent message tokens retained verbatim. */
++  retainTokens: number
++}
++
+ /** Expected failure classes for an explicit idle-session compaction request. */
+ export type ManualCompactionErrorCode =
+   | 'busy'
+@@ -90,6 +100,17 @@
+     compaction: CompactionEngine
+   }
+   interface Events {
++    /**
++     * Resolve pressure budgets for the complete admitted request. Implementations
++     * preserve `0 <= retainTokens < targetTokens <= thresholdTokens` and keep the
++     * threshold below capacity minus reserved completion tokens.
++     * @param payload.agent - owner of the priced session.
++     * @param payload.contextWindow - capacity bound to the admitted request.
++     * @param payload.reservedCompletionTokens - effective output reservation.
++     * @param next - resolve the backend's configured budgets.
++     * @mode waterfall
++     */
++    'compaction/pressure-policy'(payload: { agent: CompactionAgentContext; contextWindow: number; reservedCompletionTokens: number }, next: () => CompactionPressurePolicy): CompactionPressurePolicy
+     /**
+      * Recover a failed summary request by synchronously recording a durable
+      * change to its selected input. Return true only after making progress;
+diff --git a/packages/compaction/compaction-basic/src/index.ts b/packages/compaction/compaction-basic/src/index.ts
+--- a/packages/compaction/compaction-basic/src/index.ts
++++ b/packages/compaction/compaction-basic/src/index.ts
+@@ -12,7 +12,7 @@
+ import { CONTEXT_WINDOW_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm'
+ import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
+ import { assertNever } from '@deepseek-ai/dsh-util-values'
+-import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
++import type { Agent } from '@deepseek-ai/dsh-agent'
+ import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
+ // Type-only: makes the optional sibling service available to `ctx.get()`.
+ import type {} from '@deepseek-ai/dsh-compaction-tool-result-pruner'
+@@ -155,24 +155,25 @@
+       )
+     }
+ 
+-    ctx.on('agent/pre-step', async (
++    ctx.on('agent/request-context', async (
+       { agent, signal },
+       next,
+-    ): Promise<PreStepDecision> => {
++    ): Promise<void> => {
++      await next()
+       if (!signal.aborted) {
+         try {
+           const result = await this.compactIfNeeded(agent, 'pressure', signal)
+           if (result !== null) logResult(result, 'step pressure')
+         } catch (error: unknown) {
+           if (error instanceof TargetPressureConfigError) {
+-            if (this.warnedPressureConfigTargets.has(error.targetKey)) return next()
++            if (this.warnedPressureConfigTargets.has(error.targetKey)) return
+             this.warnedPressureConfigTargets.add(error.targetKey)
+           }
+           const message = error instanceof Error ? error.message : String(error)
+-          ctx.logger.warn(`step compaction failed: ${message}; continuing the turn`)
++          signal.throwIfAborted()
++          ctx.logger.warn(`request compaction failed: ${message}; continuing the turn`)
+         }
+       }
+-      return next()
+     })
+ 
+     ctx.on('agent/status', ({ agent, status }) => {
+@@ -301,7 +302,10 @@
+       return this.compactRegion(range.start, range.end, agent, signal)
+     }
+ 
+-    const info = await this.ctx.llm.resolveModelInfo(target.provider, target.model, signal)
++    const admitted = agent.session.requestContext()
++    const info = admitted?.provider === target.provider && admitted.model === target.model
++      ? { context: admitted.contextWindow === undefined ? undefined : { contextWindow: admitted.contextWindow }, defaultMaxTokens: undefined }
++      : await this.ctx.llm.resolveModelInfo(target.provider, target.model, signal)
+     assertNoActiveCompaction(agent.session, 'automatic pressure compaction')
+     const targetKey = `${target.provider}/${target.model}`
+     if (info.context === undefined) {
+@@ -311,12 +315,18 @@
+         + 'configure contextWindow on that adapter model',
+       )
+     }
+-    const spec = resolveCompactSpec(
+-      policy,
+-      info.context.contextWindow,
+-      reservedCompletionTokens(agent, info.defaultMaxTokens),
+-    )
+-    if (measurement.totalTokens < spec.thresholdTokens) return null
++    const contextWindow = info.context.contextWindow
++    const pressure = this.ctx.waterfall('compaction/pressure-policy', {
++      agent,
++      contextWindow,
++      reservedCompletionTokens: reservedCompletionTokens(agent, info.defaultMaxTokens),
++    }, () => {
++      const spec = resolveCompactSpec(policy, contextWindow,
++        reservedCompletionTokens(agent, info.defaultMaxTokens))
++      return { thresholdTokens: spec.thresholdTokens, targetTokens: spec.thresholdTokens,
++        retainTokens: spec.retainTokens }
++    })
++    if (measurement.totalTokens < pressure.thresholdTokens) return null
+ 
+     // Once pressure qualifies, land the model-free pass before choosing a
+     // summary range, then remeasure through the singleton replay fold.
+@@ -324,11 +334,11 @@
+       prune.pruneSession(agent.session)
+       measurement = meter.measure(agent.session)
+     }
+-    if (measurement.totalTokens < spec.thresholdTokens) return null
++    if (measurement.totalTokens < pressure.thresholdTokens) return null
+ 
+     let result: CompactionResult | null = null
+-    for (let attempt = 0; attempt <= spec.compactionRetries; attempt += 1) {
+-      const range = selectCompactableRange(agent.session, measurement, spec.retainTokens)
++    for (let attempt = 0; attempt <= policy.compactionRetries; attempt += 1) {
++      const range = selectCompactableRange(agent.session, measurement, pressure.retainTokens)
+       if (range === null) {
+         /* v8 ignore else -- concrete replacement preserves a compactable checkpoint; subclass hooks cannot mutate it. */
+         if (result === null) return null
+@@ -337,12 +347,12 @@
+       }
+       result = await this.compactRegion(range.start, range.end, agent, signal)
+       measurement = meter.measure(agent.session)
+-      if (measurement.totalTokens < spec.thresholdTokens) return result
++      if (measurement.totalTokens < pressure.targetTokens) return result
+     }
+ 
+     throw new Error(
+-      `compaction still above threshold after ${spec.compactionRetries + 1} compaction attempts `
+-      + `(${measurement.totalTokens} estimated tokens >= threshold ${spec.thresholdTokens})`,
++      `compaction still above threshold after ${policy.compactionRetries + 1} compaction attempts `
++      + `(${measurement.totalTokens} estimated tokens >= target ${pressure.targetTokens})`,
+     )
+   }
+ 
+diff --git a/packages/compaction/compaction-basic/tests/compaction-basic.spec.ts b/packages/compaction/compaction-basic/tests/compaction-basic.spec.ts
+--- a/packages/compaction/compaction-basic/tests/compaction-basic.spec.ts
++++ b/packages/compaction/compaction-basic/tests/compaction-basic.spec.ts
+@@ -1673,11 +1673,11 @@
+ })
+ 
+ describe('automatic listener and loader composition', () => {
+-  function preStep(ctx: Context, owner: Agent, signal = SIGNAL) {
+-    return agentEvents(ctx, owner).waterfall(
+-      'agent/pre-step', { messages: [], turn: 1, step: 1, signal },
+-      () => Promise.resolve({ kind: 'enter' as const, messages: [] }),
++  async function preStep(ctx: Context, owner: Agent, signal = SIGNAL) {
++    await agentEvents(ctx, owner).waterfall(
++      'agent/request-context', { turn: 1, step: 1, signal }, async () => {},
+     )
++    return { kind: 'enter' as const, messages: [] }
+   }
+ 
+   function recover(
+diff --git a/packages/compaction/compaction-basic/tests/compaction-loop-repro.spec.ts b/packages/compaction/compaction-basic/tests/compaction-loop-repro.spec.ts
+--- a/packages/compaction/compaction-basic/tests/compaction-loop-repro.spec.ts
++++ b/packages/compaction/compaction-basic/tests/compaction-loop-repro.spec.ts
+@@ -87,7 +87,7 @@
+       provider,
+       id: model,
+       name: model,
+-      context: { contextWindow: 128 },
++      context: { contextWindow: 20_000 },
+     })
+   }
+ 
+@@ -229,7 +229,7 @@
+     }
+   })
+ 
+-  it('runs automatic pressure between the completed tool step and the next step', async () => {
++  it('runs automatic pressure after next-step admission and before model dispatch', async () => {
+     const { ctx } = await harness(8)
+     try {
+       const agent = await ctx.agentLoop.create(SessionId('post-step-order'), { provider: 'mock', model: 'mock' })
+@@ -248,14 +248,14 @@
+         && event.data.step === precedingResult.data.step
+         && event.seq > precedingResult.seq,
+       )
+-      const nextStepStart = events.find(event =>
++      const nextStepStart = events.findLast(event =>
+         event.type === 'step/start'
+         && event.data.step === precedingResult.data.step + 1
+-        && event.seq > compactStart!.seq,
++        && event.seq < compactStart!.seq,
+       )
+       expect(precedingResult.seq).toBeLessThan(compactStart!.seq)
+       expect(precedingStepEnd!.seq).toBeLessThan(compactStart!.seq)
+-      expect(compactStart!.seq).toBeLessThan(nextStepStart!.seq)
++      expect(nextStepStart!.seq).toBeLessThan(compactStart!.seq)
+     } finally {
+       await ctx.fiber.dispose()
+     }
+diff --git a/packages/core/agent/README.md b/packages/core/agent/README.md
+--- a/packages/core/agent/README.md
++++ b/packages/core/agent/README.md
+@@ -10,6 +10,8 @@
+ ## Summary
+ 
+ Use `dsh-agent` to create or resume live agents, send follow-up or steering input, inject model-facing context, cancel work, and wait for idle completion. Plugins, UI, hooks, and orchestrators can also observe or intercept agent activity and apply capabilities to one agent without affecting others. Choose it when code needs to control or extend live agents through the public `Agent` API. Pair it with an agent driver such as `dsh-agent-loop`; this package does not create model requests by itself. Initiator attribution is process-local and must be carried explicitly across workers, processes, durable queues, and restarts.
++
++`agent/request-context` reconciles the complete durable input and registration-bound request context before the loop freezes model history. Listeners commit logged replacements and delegate with `next()`. Cancellation retains admitted facts; failures prevent dispatch.
+ 
+ ## Table of Contents
+ 
+diff --git a/packages/core/agent/README.zh.md b/packages/core/agent/README.zh.md
+--- a/packages/core/agent/README.zh.md
++++ b/packages/core/agent/README.zh.md
+@@ -10,6 +10,8 @@
+ ## 概述
+ 
+ 使用 `dsh-agent` 创建或恢复实时 agent（智能体）、发送后续或 steering（中途引导）输入、注入面向模型的上下文、取消工作，并等待 agent 进入空闲状态。插件、UI、钩子与编排器还可以观察或拦截 agent 活动，并仅为一个 agent 应用能力而不影响其他 agent。当代码需要通过公开 `Agent` API 控制或扩展实时 agent 时，请选择本包。请将它与 `dsh-agent-loop` 等 agent 驱动器配合使用；本包本身不会创建模型请求。发起方归因仅存在于进程内，跨 worker、进程、持久队列与重启时必须显式传递。
++
++`agent/request-context` 在完整输入及本次路由元数据入日志后、模型历史冻结前执行。监听者通过日志记录替换并调用 `next()`。取消保留已接纳事实，失败阻止发送。
+ 
+ ## 目录
+ 
+diff --git a/packages/core/agent-loop/README.md b/packages/core/agent-loop/README.md
+--- a/packages/core/agent-loop/README.md
++++ b/packages/core/agent-loop/README.md
+@@ -10,6 +10,8 @@
+ ## Summary
+ 
+ `dsh-agent-loop` creates fresh agents or resumes persisted sessions, then drives each turn through model requests, streamed responses, tool execution, and durable session history. Mount it for standard agent compositions; declarative entries start agents at boot, while the public `ctx.agents` API supports programmatic creation and resume. `maxParallelToolCalls` limits concurrent parallel-safe calls, and exclusive calls retain ordering. Cancellation preserves streamed text already delivered to the user. Choose a custom `Agent` implementation only when the standard "call model, run tools, repeat" lifecycle is insufficient.
++
++`requestContextVersion` identifies the driver’s complete-request reconciliation support. After admitted users, system prompt, tools, and bound capacity are logged, `agent/request-context` runs before request freezing; surface changes start a new logged request series. Runtime snapshots compare their original contributed sections so a compact view does not cause unchanged state to be reinjected.
+ 
+ ## Table of Contents
+ 
+diff --git a/packages/core/agent-loop/README.zh.md b/packages/core/agent-loop/README.zh.md
+--- a/packages/core/agent-loop/README.zh.md
++++ b/packages/core/agent-loop/README.zh.md
+@@ -10,6 +10,8 @@
+ ## 概述
+ 
+ `dsh-agent-loop` 创建全新 agent 或恢复持久化会话，随后通过模型请求、流式响应、工具执行和持久会话历史驱动每个轮次。标准 agent 组合应挂载本包；声明式条目会在启动时启动 agent，公开的 `ctx.agents` API 则支持以编程方式创建和恢复 agent。`maxParallelToolCalls` 限制同时运行的并行安全调用数量，独占调用保留顺序。取消会保留已经流式交付给用户的文本。只有标准的「调用模型、运行工具、重复」生命周期无法满足需求时，才应选择自定义 `Agent` 实现。
++
++`requestContextVersion` 标识驱动支持的完整请求检查版本。用户输入、系统提示、工具和本次路由容量入日志后，`agent/request-context` 在请求冻结前执行；替换触发新的请求序列。运行时快照按原始贡献比较版本，缩短呈现不会导致相同状态反复注入。
+ 
+ ## 目录
+ 
+diff --git a/packages/compaction/compaction/README.md b/packages/compaction/compaction/README.md
+--- a/packages/compaction/compaction/README.md
++++ b/packages/compaction/compaction/README.md
+@@ -10,6 +10,8 @@
+ ## Summary
+ 
+ `dsh-compaction` lets a long session condense its older history into a single summary message, keep the recent conversation intact, and continue as if the summary had always been there — with a backend such as `dsh-compaction-basic` and the optional `/compact` command. The shadowed content stays in the session log, so replaying the session deterministically reproduces the same condensed conversation. Reach for this package when you implement a condensation backend, build something that triggers condensation, or need to recognize condensed messages — it performs no condensation itself. Choose the shipped backend when you want the feature working out of the box.
++
++`compaction/pressure-policy` resolves trigger, target, and retained-tail token budgets for one admitted request. Policy providers preserve `0 <= retainTokens < targetTokens <= thresholdTokens` and reserve the effective output budget. The complete request capacity comes from its bound preparation.
+ 
+ ## Table of Contents
+ 
+diff --git a/packages/compaction/compaction/README.zh.md b/packages/compaction/compaction/README.zh.md
+--- a/packages/compaction/compaction/README.zh.md
++++ b/packages/compaction/compaction/README.zh.md
+@@ -10,6 +10,8 @@
+ ## 概述
+ 
+ `dsh-compaction` 让长时会话把较早历史压缩（compaction）成一条摘要消息、保持近期对话不变，并像摘要一直存在那样继续下去——配合 `dsh-compaction-basic` 之类的后端与可选的 `/compact` 命令即可实现。被遮蔽的内容仍保留在会话日志中，因此回放会话时能确定性地重现同一份压缩后的对话。当你实现压缩后端、构建触发压缩的组件，或需要识别压缩后的消息时，才需要本包——它本身不执行任何压缩。想开箱即用地获得该功能时，请选择随附后端。
++
++`compaction/pressure-policy` 为已接纳请求提供触发、压缩目标和尾部保留预算。策略保证 `0 <= retainTokens < targetTokens <= thresholdTokens` 并预留有效输出额度；容量取自本次绑定的请求准备结果。
+ 
+ ## 目录
+ 
+diff --git a/packages/compaction/compaction-basic/README.md b/packages/compaction/compaction-basic/README.md
+--- a/packages/compaction/compaction-basic/README.md
++++ b/packages/compaction/compaction-basic/README.md
+@@ -10,6 +10,8 @@
+ ## Summary
+ 
+ This package keeps long agent conversations working near the model's context limit. As token pressure builds, it condenses the oldest history into a summary while preserving recent messages; after a context-overflow error, it condenses and retries. You can also request condensation with `/compact` and optionally trim oversized tool outputs first. Condensation uses one extra model request and retains only its summary text. It cannot reduce the system prompt, tools, or session prefix, or split one indivisible unit such as a single huge tool call.
++
++Automatic pressure runs after complete request admission through `agent/request-context`, after downstream context reconciliation. An optional `compaction/pressure-policy` listener replaces the configured trigger, target, and retained-tail budgets. Bound request capacity is reused without a second model lookup. Condensation must reach the policy target; ordinary summary failures remain warnings and canonical overflow recovery stays available.
+ 
+ ## Table of Contents
+ 
+diff --git a/packages/compaction/compaction-basic/README.zh.md b/packages/compaction/compaction-basic/README.zh.md
+--- a/packages/compaction/compaction-basic/README.zh.md
++++ b/packages/compaction/compaction-basic/README.zh.md
+@@ -10,6 +10,8 @@
+ ## 概述
+ 
+ 本包让长时 agent（智能体）会话在接近模型上下文上限时仍能正常工作。token 压力上升时，它会把最旧的历史压缩为摘要并保留近期消息；上下文溢出错误发生后，它会压缩并重试。你也可以通过 `/compact` 按需压缩，并选择先修剪超大工具输出。压缩使用一次额外的模型请求，并且只保留该请求返回的摘要文本。它无法缩减系统提示词、工具或会话前缀，也无法拆分单个不可分单元（例如一次超大工具调用）。
++
++自动压力检查通过 `agent/request-context` 在完整输入接纳及下游上下文整理之后执行。可选 `compaction/pressure-policy` 监听者提供触发、压缩目标及尾部保留预算。容量复用本次请求准备结果，避免再次查询模型。摘要需达到目标；普通摘要失败仍记录警告，真实上下文溢出的恢复保持可用。
+ 
+ ## 目录
+ 
+diff --git a/docs/architecture.md b/docs/architecture.md
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -97,6 +97,7 @@
+      agent/request -> prepareCall (cancellation commits neither system nor users)
+      reconcile system/message using the prepared call capability
+      append entered messages as user/message; log request/header and request/context as needed
++     agent/request-context -> logged surface policy and compaction
+      derive and freeze model history from the log
+      stream the bound prepared call -> llm/stream -> agent/assistant-stream start
+        agent/assistant-stream chunk*
+diff --git a/docs/architecture.zh.md b/docs/architecture.zh.md
+--- a/docs/architecture.zh.md
++++ b/docs/architecture.zh.md
+@@ -101,6 +101,7 @@
+      agent/request -> prepareCall (cancellation commits neither system nor users)
+      reconcile system/message using the prepared call capability
+      append entered messages as user/message; log request/header and request/context as needed
++     agent/request-context -> logged surface policy and compaction
+      derive and freeze model history from the log
+      stream the bound prepared call -> llm/stream -> agent/assistant-stream start
+        agent/assistant-stream chunk*
+@@ -170,3 +171,5 @@
+ | 将注册项限定到单个 agent | 使用该 agent 的 `agent.ctx` |
+ 
+ [扩展实操手册](cookbook/extension-cookbook.zh.md)将功能映射到能力，并索引[包](cookbook/adding-a-package.zh.md)、[工具](cookbook/adding-a-tool.zh.md)、[LLM（大语言模型）适配器](cookbook/adding-an-llm-adapter.zh.md)和[设置页](cookbook/adding-a-settings-card.zh.md)的分步指南。[Conversation 子系统](subsystems/conversation.zh.md)负责 Chat node 组装。
++
++宿主可通过 Agent 的可选原会话恢复能力续跑中断轮次，不添加模型输入；资格与驱动启动由 agent-loop 同步核验。主会话保留原日志和队列，子会话经 subagent 服务复用原父关系及 Activation 生命周期。详见 [agent-loop](../packages/core/agent-loop/README.zh.md#原会话恢复)。
+diff --git a/scripts/gen-cordis-catalog.ts b/scripts/gen-cordis-catalog.ts
+--- a/scripts/gen-cordis-catalog.ts
++++ b/scripts/gen-cordis-catalog.ts
+@@ -471,6 +471,7 @@
+   PtcRunSandbox: 'ptc-runtime.md',
+   PtcRunResult: 'ptc-runtime.md',
+   CompactionResult: 'compaction.md',
++  CompactionPressurePolicy: 'compaction.md',
+   CompactionTrigger: 'compaction.md',
+   PruneResult: 'compaction.md',
+   FileReadOutcome: 'filesystem.md',

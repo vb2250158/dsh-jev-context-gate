@@ -1,4 +1,6 @@
-import { createUserMessage } from '@deepseek-ai/dsh-llm';
+import { defineTool } from '@deepseek-ai/dsh-tools';
+import { installContextPolicy } from './context-policy.mjs';
+import { createUserMessage, createDeveloperMessage } from '@deepseek-ai/dsh-llm';
 import { escapeText, renderSkillContent } from '@deepseek-ai/dsh-skill';
 import { Config, DEFAULT_SETTINGS, SETTINGS_NAMESPACE, SettingsSchema } from './settings.mjs';
 import { judge } from './judge.mjs';
@@ -17,7 +19,7 @@ import { dispatchToTool, dispatchToRabi } from './dispatch-adapters.mjs';
 export { Config, DEFAULT_SETTINGS, SETTINGS_NAMESPACE, SettingsSchema } from './settings.mjs';
 export { evaluatePolicy } from './policy.mjs';
 export const name = 'dsh-jev-context-gate';
-export const inject = ['settings', 'llm', 'skills', 'tools'];
+export const inject = ['settings', 'llm', 'skills', 'tools', 'tokenMeter'];
 const contextMessage = (text, source = { kind: `plugin:${name}`, form: 'instructions' }) => createUserMessage({ content: [{ type: 'text', text }], source });
 const selectedText = (rule, selected) => {
   const items = selected.map(entry => `- ${entry.description}`).join('\n');
@@ -27,6 +29,7 @@ const selectedText = (rule, selected) => {
 
 export function apply(ctx, config = {}) {
   const scope = { get: () => config.get() };
+  installContextPolicy(ctx, () => scope.get(), { createUserMessage, createDeveloperMessage, defineTool });
   ctx.effect(() => ctx.settings.configure({ auto: false }, ctx.fiber));
   const capabilities = createCapabilityRegistry();
   const internalCalls = new Set();

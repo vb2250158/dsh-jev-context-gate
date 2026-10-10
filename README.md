@@ -6,6 +6,16 @@ This release requires DSH 0.2.1-alpha.1 or a compatible 0.2 release. See [compat
 
 DSH 的智能规则插件（包名 `dsh-jev-context-gate`）。插件 → 智能规则 → 配置可配置事件判断、内容筛选和动作执行；DSH 0.2 的配置按插件入口 ID `dsh-jev-context-gate` 读写。选择独立判定模型后，按事件读取待判断内容、提出选择题，并执行获选选项配置的行为。普通模型使用 LLM JSON 估计选项概率；型号以 `jev-` 开头时标为 Jev 原生，原生结构化调用仍需模型提供商接入。
 
+## 统一上下文策略
+
+状态预览只缩短结构化数组，不截断无法解析的事实或授权文本；无法缩至预览预算时保留原文，由正常压缩处理。
+
+`contextPolicy` 默认开启，独立于模型判定总开关。快照和目录按 `source.kind`、`source.plugin`、`source.contextKey`、`source.form` 确定同一会话内的身份；`snapshot`、`catalog` 保留最新版本，普通用户消息和 `instructions` 保持原样。一个插件提供多份同类状态时必须指定不同 `contextKey`。旧状态通过带计量记录的空 developer 节点撤下，原始日志保留。大型状态提供数组数量和少量条目，技能目录保留所有名称并缩短简介；模型通过 `context_read` 按原始序号分页读取完整内容。
+
+请求在实际路由、完整输入和工具定义入日志后执行策略，再检查压缩压力。阈值统一取窗口的 `thresholdRatio` 与扣除输出预留、`headroomRatio` 后预算的较小值；压缩目标与保留尾部按剩余消息预算的 `targetRatio`、`retainRatio` 计算，适用于所有模型。默认比例依次为 `0.8`、`0.06`、`0.4`、`0.16`；状态预览上限为 12000 字符，目录描述上限为 96 字符，数组预览 3 项，详情页 4096 字符。这些值均可通过插件配置的 `contextPolicy` 修改。输出预留仍采用适配器声明的有效值，不假定服务端执行了本地输出上限。
+
+启用前必须应用 [宿主补丁](patches/2026-10-10-request-context-policy.patch) 并重建涉及的 Host 包。补丁增加完整请求检查入口、固定本次路由容量、压缩目标策略和快照原始版本识别；策略实现由本插件维护。另一台电脑先核对 [补丁说明](patches/README.md) 的基线与依赖补丁，运行 `git apply --check` 后应用；上游更新后重新检查。缺少补丁时开启策略会报错；设置 `contextPolicy.enabled: false` 可保留已有智能规则。插件卸载撤销工具和监听，已记录的替换继续参与会话回放。
+
 ## 0.1.22
 
 扩展事件的候选参数允许只有一项。选择“裁剪”时，`emit()` 返回的 `parameters` 才把该参数替换为入选项；选择“注入额外内容”时，参数保持原样，入选项仍在 `selections` 中返回。事件提供者依据返回参数决定实际写入或裁剪。
