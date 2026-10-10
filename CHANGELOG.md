@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.1.36
+
+- 压缩后在同一次请求中恢复完整项目指令和技能目录；相同文件版本与正文的重复批次撤下并计量。
+- 保持基线、修改及删除通知顺序；技能目录保留正文按需加载指引。
+- Restore complete workspace instructions and catalogs before the compacted request freezes; deduplicate exact file-version batches with logged accounting. Preserve baseline, update, and removal order and skill-loading guidance.
+
 ## 0.1.35
 
 - 最新状态依据发布序号确定，兼容表面头部替换；复制会话保留完整原文并重绑查询序号。

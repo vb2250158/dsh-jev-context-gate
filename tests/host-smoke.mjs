@@ -25,6 +25,18 @@ import { installContextPolicy, DEFAULT_CONTEXT_POLICY } from ${JSON.stringify(pa
 export const inject = ['agentLoop', 'tools', 'tokenMeter', 'llm', 'systemPrompt'];
 export function apply(ctx) {
   const state = { revision: 0, requests: [] };
+  const seeded = new WeakSet();
+  ctx.on('agent/pre-step', async ({agent}, next) => {
+    const decision = await next();
+    if (decision.kind === 'reject' || seeded.has(agent)) return decision;
+    seeded.add(agent);
+    const rules = () => createUserMessage({content:[{type:'text',text:'FULL_WORKSPACE_RULE: External messages require explicit user authorization.'}],
+      source:{kind:'agent-instructions',form:'instructions',baseline:true,baselineIdentity:'fixture-workspace',
+        changes:[{action:'set',scope:'fixture/AGENTS.md',path:'fixture/AGENTS.md',digest:'fixture-v1'}]}});
+    const entries = Array.from({length:200},(_,i)=>({name:'fixture-skill-'+i,description:'description '.repeat(40)}));
+    const catalog = createUserMessage({content:[{type:'text',text:JSON.stringify(entries)}],source:{kind:'skill-catalog',form:'catalog',entries}});
+    return {...decision,messages:[...decision.messages,rules(),rules(),catalog]};
+  });
   ctx.provide('contextFixture', state);
   class Adapter extends LlmAdapter {
     async resolveModel(provider, model) { return { provider, id: model, name: model, context: { contextWindow: 272000, maxTokens: 128000 } }; }
@@ -74,6 +86,8 @@ export function apply(ctx) {
   assert.ok(active.content[0].text.length <= 12000);
   assert.ok(messages.some(m => m.content.some(b => b.text === 'Keep the original task identity.')));
   assert.ok(messages.every(m => m.content.length > 0));
+  assert.equal(messages.filter(m => m.source?.kind === 'agent-instructions').length,1);
+  assert.equal(messages.filter(m => m.source?.kind === 'skill-catalog').length,1);
   const originalSeq = active.source.contextPolicy.sourceSeq;
   let offset = 0, original = '';
   do { const page = readContext(agent.session, { seq: originalSeq, offset }, 4096); original += page.content; offset = page.nextOffset; } while(offset !== null);
@@ -96,12 +110,29 @@ export function apply(ctx) {
     compactions: events.filter(e => e.type === 'compaction/end').length,
   };
   assert.deepEqual(inputSnapshot, JSON.parse(await readFile(join(plugin, 'tests/expected/context-policy-model-input.json'), 'utf8')));
-  for (let index = 0; index < 30; index++) await send('long ordinary history '.repeat(1000));
+  let previousCompactions = 0, restoredRequests = 0;
+  for (let index = 0; index < 30; index++) {
+    await send('long ordinary history '.repeat(1000));
+    const count = agent.session.snapshotEvents().filter(e=>e.type==='compaction/end').length;
+    if(count > previousCompactions) {
+      const input = ctx.contextFixture.requests.at(-1).messages;
+      assert.equal(input.filter(m=>m.source?.kind==='agent-instructions').length,1);
+      assert.ok(input.some(m=>m.content.some(b=>b.text?.includes('FULL_WORKSPACE_RULE: External messages require explicit user authorization.'))));
+      const catalogs=input.filter(m=>m.source?.kind==='skill-catalog');
+      assert.equal(catalogs.length,1);
+      for(let i=0;i<200;i++) assert.ok(catalogs[0].source.entries.some(e=>e.name==='fixture-skill-'+i));
+      restoredRequests++;
+    }
+    previousCompactions=count;
+  }
   const pressureEvents = agent.session.snapshotEvents();
   assert.ok(pressureEvents.some(event => event.type === 'compaction/end'), 'growing ordinary history must still compact');
   assert.equal(agent.status, 'idle');
   console.log(JSON.stringify(inputSnapshot));
-  console.log(JSON.stringify({ pressureCompactions: pressureEvents.filter(event => event.type === 'compaction/end').length }));
+  assert.ok(restoredRequests>0);
+  const restoredSnapshot = { pressureCompactions: pressureEvents.filter(event => event.type === 'compaction/end').length, restoredRequests, fullWorkspaceRules: true, catalogEntries: 200, activeCatalogs: 1, activeInstructionBatches: 1 };
+  assert.deepEqual(restoredSnapshot, JSON.parse(await readFile(join(plugin,'tests/expected/required-context-model-input.json'),'utf8')));
+  console.log(JSON.stringify(restoredSnapshot));
 } finally {
   if (ctx) await ctx.fiber.dispose();
   assert.ok(resolve(dir).startsWith(resolve(tmpdir()) + '/'.replace('/', process.platform === 'win32' ? '\\' : '/')));

@@ -4,7 +4,7 @@
 
 Run the commands in [the Chinese instructions](README.md) from the DSH checkout; `<plugin>` is this plugin's absolute checkout path. Build the affected Host packages, regenerate API documentation and translation records, install through the managed manifest, restart the host, and recover original sessions.
 
-Automatic compaction now runs after complete input and bound route capacity are logged, through `agent/request-context`, before request freezing. Extensions relying on pre-step compaction order must migrate; ordinary input rewriting still uses `agent/pre-step`. `compaction/pressure-policy` resolves the trigger, target and retained-tail budgets. It does not change the model's actual output limit.
+Automatic compaction now runs after complete input and bound route capacity are logged, through `agent/request-context` and post-compaction `agent/request-context-ready` (0.1.36 additionally checks `requestContextFinalizeVersion`), before request freezing. Extensions relying on pre-step compaction order must migrate; ordinary input rewriting still uses `agent/pre-step`. `compaction/pressure-policy` resolves the trigger, target and retained-tail budgets. It does not change the model's actual output limit.
 
 Replacements use existing durable event types; no session format changes or historical overwrites are introduced. Unloading disposes tools and listeners; already logged replacements remain effective and original content remains recorded. Disable `contextPolicy.enabled` before reverting host code and restore from the installation snapshot. Recheck the patch after upstream updates; do not apply it twice.
 

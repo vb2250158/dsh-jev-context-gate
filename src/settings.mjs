@@ -1,5 +1,5 @@
 import z from '@deepseek-ai/schemastery';
-import { DEFAULT_CONTEXT_POLICY } from './context-policy.mjs';
+import { DEFAULT_CONTEXT_POLICY } from './context-defaults.mjs';
 
 export const SETTINGS_NAMESPACE = 'jev-context-gate';
 const commonRuleFields = { toolName: '',

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_CONTEXT_POLICY, contextKey, renderContext, pressurePolicy, reconcileContext, readContext } from '../src/context-policy.mjs';
+import { DEFAULT_CONTEXT_POLICY, contextKey, renderContext, pressurePolicy, reconcileContext, readContext, reconcileInstructions, requiredContext, restoreRequiredContext } from '../src/context-policy.mjs';
 
 const snapshot = (text, key = 'state') => ({ role: 'user', content: [{ type: 'text', text }], source: { kind: 'test-provider', form: 'snapshot', contextKey: key } });
 const settings = { ...DEFAULT_CONTEXT_POLICY };
@@ -18,6 +18,63 @@ function history(messages) {
 }
 const meter = { estimateMessage: message => Math.ceil(JSON.stringify(message.content).length / 4) };
 const builders = { createUserMessage: value => ({ role: 'user', ...value }), createDeveloperMessage: value => ({ role: 'developer', ...value }) };
+const instruction = (text = 'External actions require user approval.', digest = 'file-v1', scope = 'workspace/AGENTS.md') => ({ role: 'user', content: [{type:'text',text}],
+  source: {kind:'agent-instructions',form:'instructions',changes:[{action:'set',scope,path:scope,digest}]} });
+
+test('workspace dedup requires matching full bodies, file identity, versions and framing', () => {
+  const first = instruction(), changed = instruction('A changed permission rule.', 'file-v2');
+  const other = instruction(first.content[0].text, 'file-v1', 'nested/AGENTS.md');
+  const partial = instruction('A short summary.');
+  const human = {...first,source:{kind:'user'}};
+  const session = history([first, human, other, partial, first, changed]);
+  assert.equal(reconcileInstructions({session}, {turn:1,step:1}, meter, builders), 1);
+  for (const seq of [1,2,3,4,5]) assert.ok(session.surface.nodes.includes(seq));
+  assert.equal(session.events.at(-2).data.shadowedTokenCount, meter.estimateMessage(first));
+  assert.equal(reconcileInstructions({session}, {turn:1,step:2}, meter, builders), 0);
+});
+
+test('successful compaction restores full instructions and catalog, excluding summaries and stale snapshots', () => {
+  const catalog = {...snapshot('complete catalog'),source:{kind:'skill-catalog',form:'catalog',entries:[]}};
+  const session = history([instruction(),catalog,snapshot('runtime state')]);
+  const captured = requiredContext(session), since = session.seq;
+  session.surface.nodes.splice(0,2);
+  session.append('user/message', {...instruction('summary only'),source:{kind:'compact-checkpoint'}});
+  session.append('compaction/end', {});
+  assert.equal(restoreRequiredContext(session,captured,since,meter,builders,{turn:1,step:1}),2);
+  assert.equal(session.events.at(-2).data.content[0].text,instruction().content[0].text);
+  assert.deepEqual(session.events.at(-2).sourceEventSeqs,[0]);
+  assert.equal(restoreRequiredContext(session,captured,since,meter,builders,{turn:1,step:1}),0);
+});
+
+test('restoration does not resurrect contexts after ordinary retirement or failed compaction', () => {
+  for (const failed of [false,true]) {
+    const session = history([instruction()]), captured = requiredContext(session), since=session.seq;
+    session.surface.nodes.length = 0;
+    if(failed) session.append('compaction/end',{error:'summary failed'});
+    assert.equal(restoreRequiredContext(session,captured,since,meter,builders,{turn:1,step:1}),0);
+  }
+});
+
+test('a restored baseline precedes the retained replacement and removal instructions', () => {
+  const baseline=instruction('Original permission rule.'), delta=instruction('Changed permission rule.','file-v2');
+  const removal=instruction('Nested instructions no longer apply.','unused','nested/AGENTS.md');
+  removal.source.changes[0]={action:'remove',scope:'nested/AGENTS.md',path:'nested/AGENTS.md'};
+  const session=history([baseline,delta,removal]),captured=requiredContext(session),since=session.seq;
+  session.surface.nodes.shift();
+  session.append('compaction/end',{});
+  assert.equal(restoreRequiredContext(session,captured,since,meter,builders,{turn:1,step:1}),3);
+  const visible=requiredContext(session).map(entry=>entry.message);
+  assert.deepEqual(visible,[baseline,delta,removal]);
+  assert.equal(session.events.filter(e=>e.type==='compaction/prune').length,2);
+});
+
+test('unknown instruction producers and incomplete file metadata remain untouched', () => {
+  const unknown={...instruction(),source:{kind:'skill-invocation',form:'instructions'}}, missing=instruction();
+  delete missing.source.changes[0].digest;
+  const session=history([unknown,unknown,missing,missing]);
+  assert.equal(reconcileInstructions({session},{turn:1,step:1},meter,builders),0);
+  assert.deepEqual(requiredContext(session),[]);
+});
 
 test('unstructured state and trailing authorization are never truncated', () => {
   const text = 'state fact '.repeat(2000) + 'External actions still need authorization.';
@@ -88,6 +145,7 @@ test('catalog keeps every name and leaves the full descriptions queryable', () =
   const message = { ...snapshot(JSON.stringify(entries)), source: { kind: 'skill-catalog', form: 'catalog', entries } };
   const rendered = renderContext(message, 7, settings);
   for (const entry of entries) assert.ok(rendered.includes(entry.name + ':'));
+  assert.match(rendered,/先用 skill 加载正文/);
   assert.ok(rendered.length < message.content[0].text.length);
   assert.equal(contextKey({ ...message, source: { kind: 'user' } }), undefined);
 });

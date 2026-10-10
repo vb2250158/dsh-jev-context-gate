@@ -1,7 +1,7 @@
 diff --git a/packages/core/agent/src/runtime-types.ts b/packages/core/agent/src/runtime-types.ts
 --- a/packages/core/agent/src/runtime-types.ts
 +++ b/packages/core/agent/src/runtime-types.ts
-@@ -352,6 +352,18 @@
+@@ -336,6 +336,28 @@
      */
      'agent/request'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<LlmCallConfig>): Promise<LlmCallConfig>
      /**
@@ -17,13 +17,23 @@ diff --git a/packages/core/agent/src/runtime-types.ts b/packages/core/agent/src/
 +     */
 +    'agent/request-context'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<void>): Promise<void>
 +    /**
++     * Restore required logged context after all request compaction listeners settle.
++     * Listeners must delegate; failure prevents dispatch. The loop freezes input after this chain.
++     * @param payload.agent - agent owning the admitted request.
++     * @param payload.turn - open turn number.
++     * @param payload.step - open step number.
++     * @param payload.signal - turn cancellation signal.
++     * @mode waterfall
++     */
++    'agent/request-context-ready'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<void>): Promise<void>
++    /**
       * Handle one failed model-request attempt before the loop retries or closes
       * its step. A listener returns `{ kind: 'retry' }` without calling `next()`
       * when it owns recovery, or calls `next()` to delegate. The default
 diff --git a/packages/core/agent-loop/src/agent.ts b/packages/core/agent-loop/src/agent.ts
 --- a/packages/core/agent-loop/src/agent.ts
 +++ b/packages/core/agent-loop/src/agent.ts
-@@ -458,7 +458,7 @@
+@@ -422,7 +422,7 @@
          }
        }
        firstAttempt = false
@@ -32,7 +42,7 @@ diff --git a/packages/core/agent-loop/src/agent.ts b/packages/core/agent-loop/sr
        const live = new AssistantStreamAttempt(
          this.session.id,
          ++this.assistantAttemptCounter,
-@@ -632,14 +632,14 @@
+@@ -596,14 +596,14 @@
    }
  
    /** Log the resolved envelope and derive a frozen request from the admitted surface. */
@@ -49,12 +59,14 @@ diff --git a/packages/core/agent-loop/src/agent.ts b/packages/core/agent-loop/sr
      const { session } = this
      const surfaceGeneration = session.surface.contentGeneration
      const header = canonicalHeader({
-@@ -702,6 +702,14 @@
+@@ -666,6 +666,16 @@
      }
      signal.throwIfAborted()
  
 +    const admittedGeneration = session.surface.contentGeneration
 +    await this.dispatch.waterfall('agent/request-context', { ...position, signal }, async () => {})
++    signal.throwIfAborted()
++    await this.dispatch.waterfall('agent/request-context-ready', { ...position, signal }, async () => {})
 +    signal.throwIfAborted()
 +    if (session.surface.contentGeneration !== admittedGeneration) {
 +      session.append('request/header', { header, reason: 'series' })
@@ -67,12 +79,14 @@ diff --git a/packages/core/agent-loop/src/agent.ts b/packages/core/agent-loop/sr
 diff --git a/packages/core/agent-loop/src/index.ts b/packages/core/agent-loop/src/index.ts
 --- a/packages/core/agent-loop/src/index.ts
 +++ b/packages/core/agent-loop/src/index.ts
-@@ -328,6 +328,9 @@
+@@ -328,6 +328,11 @@
  
  /** Concrete agent factory and driver service. */
  export class AgentLoop extends Service implements AgentFactory {
 +  /** Version of the complete-request context reconciliation event supported by this driver. */
 +  readonly requestContextVersion: 1 = 1
++  /** Post-compaction input-finalization extension version. */
++  readonly requestContextFinalizeVersion: 1 = 1
 +
    static inject = ['agents', 'sessions', 'llm', 'tools', 'systemPrompt', 'sessionProjections']
  
@@ -312,7 +326,7 @@ diff --git a/packages/core/agent/README.md b/packages/core/agent/README.md
  <a id="understand-the-implementation"></a>
  ## Understand the implementation
 +
-+`agent/request-context` reconciles the complete durable input and registration-bound request context before the loop freezes model history. Listeners commit logged replacements and delegate with `next()`. Cancellation retains admitted facts; failures prevent dispatch.
++`agent/request-context` reconciles the complete durable input and registration-bound request context before the loop freezes model history. Listeners commit logged replacements and delegate with `next()`. `agent/request-context-ready` restores required context after compaction settles. Cancellation retains admitted facts; failures prevent dispatch.
  
  <details>
  <summary>Implementation internals — click to expand</summary>
@@ -324,7 +338,7 @@ diff --git a/packages/core/agent/README.zh.md b/packages/core/agent/README.zh.md
  <a id="understand-the-implementation"></a>
  ## 理解实现
 +
-+`agent/request-context` 在完整输入及本次路由元数据入日志后、模型历史冻结前执行。监听者通过日志记录替换并调用 `next()`。取消保留已接纳事实，失败阻止发送。
++`agent/request-context` 在完整输入及本次路由元数据入日志后、模型历史冻结前执行。监听者通过日志记录替换并调用 `next()`。`agent/request-context-ready` 在压缩结束后恢复必需上下文。取消保留已接纳事实，失败阻止发送。
  
  <details>
  <summary>实现细节——点击展开</summary>
@@ -335,7 +349,7 @@ diff --git a/packages/core/agent-loop/README.md b/packages/core/agent-loop/READM
  <a id="understand-the-implementation"></a>
  ## Understand the implementation
  
-+`requestContextVersion` identifies the driver’s complete-request reconciliation support. After admitted users, system prompt, tools, and bound capacity are logged, `agent/request-context` runs before request freezing; surface changes start a new logged request series. Runtime snapshots compare their original contributed sections so a compact view does not cause unchanged state to be reinjected.
++`requestContextVersion` identifies the driver’s complete-request reconciliation support. After admitted users, system prompt, tools, and bound capacity are logged, `agent/request-context` runs before request freezing; `agent/request-context-ready` follows completed compaction, identified by `requestContextFinalizeVersion`. Surface changes start a new logged request series. Runtime snapshots compare their original contributed sections so a compact view does not cause unchanged state to be reinjected.
 +
  <details>
  <summary>Implementation internals — click to expand</summary>
@@ -347,7 +361,7 @@ diff --git a/packages/core/agent-loop/README.zh.md b/packages/core/agent-loop/RE
  <a id="understand-the-implementation"></a>
  ## 理解实现
  
-+`requestContextVersion` 标识驱动支持的完整请求检查版本。用户输入、系统提示、工具和本次路由容量入日志后，`agent/request-context` 在请求冻结前执行；替换触发新的请求序列。运行时快照按原始贡献比较版本，缩短呈现不会导致相同状态反复注入。
++`requestContextVersion` 标识驱动支持的完整请求检查版本。用户输入、系统提示、工具和本次路由容量入日志后，`agent/request-context` 在请求冻结前执行；压缩结束后运行 `agent/request-context-ready`，由 `requestContextFinalizeVersion` 标识支持版本。替换触发新的请求序列。运行时快照按原始贡献比较版本，缩短呈现不会导致相同状态反复注入。
 +
  <details>
  <summary>实现细节——点击展开</summary>
@@ -403,26 +417,28 @@ diff --git a/packages/compaction/compaction-basic/README.zh.md b/packages/compac
 diff --git a/docs/architecture.md b/docs/architecture.md
 --- a/docs/architecture.md
 +++ b/docs/architecture.md
-@@ -97,6 +97,7 @@
+@@ -95,6 +95,8 @@
       agent/request -> prepareCall (cancellation commits neither system nor users)
       reconcile system/message using the prepared call capability
       append entered messages as user/message; log request/header and request/context as needed
 +     agent/request-context
++     agent/request-context-ready
       derive and freeze model history from the log
       stream the bound prepared call -> llm/stream -> agent/assistant-stream start
         agent/assistant-stream chunk*
 diff --git a/docs/architecture.zh.md b/docs/architecture.zh.md
 --- a/docs/architecture.zh.md
 +++ b/docs/architecture.zh.md
-@@ -101,6 +101,7 @@
+@@ -99,6 +99,8 @@
       agent/request -> prepareCall (cancellation commits neither system nor users)
       reconcile system/message using the prepared call capability
       append entered messages as user/message; log request/header and request/context as needed
 +     agent/request-context
++     agent/request-context-ready
       derive and freeze model history from the log
       stream the bound prepared call -> llm/stream -> agent/assistant-stream start
         agent/assistant-stream chunk*
-@@ -170,3 +171,5 @@
+@@ -168,3 +170,5 @@
  | 将注册项限定到单个 agent | 使用该 agent 的 `agent.ctx` |
  
  [扩展实操手册](cookbook/extension-cookbook.zh.md)将功能映射到能力，并索引[包](cookbook/adding-a-package.zh.md)、[工具](cookbook/adding-a-tool.zh.md)、[LLM（大语言模型）适配器](cookbook/adding-an-llm-adapter.zh.md)和[设置页](cookbook/adding-a-settings-card.zh.md)的分步指南。[Conversation 子系统](subsystems/conversation.zh.md)负责 Chat node 组装。
@@ -431,7 +447,7 @@ diff --git a/docs/architecture.zh.md b/docs/architecture.zh.md
 diff --git a/scripts/gen-cordis-catalog.ts b/scripts/gen-cordis-catalog.ts
 --- a/scripts/gen-cordis-catalog.ts
 +++ b/scripts/gen-cordis-catalog.ts
-@@ -471,6 +471,7 @@
+@@ -470,6 +470,7 @@
    PtcRunSandbox: 'ptc-runtime.md',
    PtcRunResult: 'ptc-runtime.md',
    CompactionResult: 'compaction.md',

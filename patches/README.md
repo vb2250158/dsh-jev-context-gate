@@ -13,7 +13,7 @@ pnpm run gen-cordis-catalog
 pnpm run verify-translation-pairing --write packages/core/agent/README.md packages/core/agent-loop/README.md packages/compaction/compaction/README.md packages/compaction/compaction-basic/README.md docs/architecture.md
 ```
 
-随后按受管清单安装本插件，重启宿主并恢复原会话。补丁改变自动压缩的触发时机：完整输入与实际路由先写入日志，再运行 `agent/request-context`，最后冻结请求。依赖旧 `agent/pre-step` 压缩顺序的扩展须迁移；普通输入改写继续使用 `agent/pre-step`。策略通过 `compaction/pressure-policy` 解析触发线、压缩目标和尾部保留量；不修改模型实际输出上限。
+随后按受管清单安装本插件，重启宿主并恢复原会话。补丁改变自动压缩的触发时机：完整输入与实际路由先写入日志，再运行 `agent/request-context`，压缩结束后运行 `agent/request-context-ready`，最后冻结请求。0.1.36 还要求驱动的 `requestContextFinalizeVersion`；已应用旧补丁的环境须补上该入口后重建。依赖旧 `agent/pre-step` 压缩顺序的扩展须迁移；普通输入改写继续使用 `agent/pre-step`。策略通过 `compaction/pressure-policy` 解析触发线、压缩目标和尾部保留量；不修改模型实际输出上限。
 
 所有模型可见替换通过既有持久事件记录，无新增会话事件类型、存储版本或历史覆盖。卸载插件会撤销工具和监听；已经写入日志的替换仍生效，原始内容保留。要停止后续整理，设置 `contextPolicy.enabled: false`；回退宿主代码前先关闭策略，再按安装快照恢复。上游变更后重新检查补丁，不重复应用。
 
