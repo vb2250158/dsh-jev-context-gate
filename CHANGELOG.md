@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.1.34
+
+- 安装组合显式声明 tokenMeter，与插件依赖保持一致；宿主补丁说明符合文档预算。
+- Declare tokenMeter in the installed composition and keep host patch documentation within repository budgets.
+
 ## 0.1.32
 
 - 统一快照生命周期、完整请求预算和压缩目标；完整状态通过 context_read 分页查询。
