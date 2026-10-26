@@ -118,7 +118,7 @@ Publish source and tag, verify the remote SHA, update the pinned SHA and version
 
 ## Limitations
 
-Native Jev structured calls still need a provider adapter. Generic probabilities are uncalibrated. A streamed reminder cannot retract text already displayed. The plugin does not verify factual claims.
+Generic probabilities are uncalibrated. Native Jev calls are not yet included in Chat Enhancement’s individual LLM-call statistics. A streamed reminder cannot retract text already displayed. The plugin does not verify factual claims.
 
 MIT
 

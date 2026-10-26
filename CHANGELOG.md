@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.1.39
+
+- 修正限制说明中仍称原生 Jev 尚未接入的旧文字。
+- Remove the obsolete limitation claiming native Jev was not integrated.
+
 ## 0.1.38
 
 - 接入 OpenRouter Jev 原生 Choice/Noul 判定，覆盖规则、候选筛选、回复匹配和单题测试；保留普通模型消息生成。
