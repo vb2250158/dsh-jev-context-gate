@@ -17,6 +17,7 @@ import { applyEventSelection, selectEventCandidates } from './event-selection.mj
 import { toolRuleInput, matchesTool, composeGroupMessage } from './tool-automation.mjs';
 import { createCapabilityRegistry, actionParameter } from './capability-registry.mjs';
 import { dispatchToTool, dispatchToRabi } from './dispatch-adapters.mjs';
+import { createTimedModelStream } from './timed-model.mjs';
 export { Config, DEFAULT_SETTINGS, SETTINGS_NAMESPACE, SettingsSchema } from './settings.mjs';
 export { evaluatePolicy } from './policy.mjs';
 export const name = 'dsh-jev-context-gate';
@@ -29,6 +30,7 @@ const selectedText = (rule, selected) => {
 };
 
 export function apply(ctx, config = {}) {
+  const timedStream = createTimedModelStream(ctx);
   const scope = { get: () => config.get() };
   installContextPolicy(ctx, () => scope.get(), { createUserMessage, createDeveloperMessage, defineTool, joinContextSections });
   ctx.effect(() => ctx.settings.configure({ auto: false }, ctx.fiber));
@@ -52,7 +54,7 @@ export function apply(ctx, config = {}) {
     }
     if (!rules.length) return { context: '' };
     return judge({ settings, phase, inputs, preparedRules: rules, signal,
-      stream: options => ctx.llm.stream(options), createMessage: contextMessage });
+      stream: timedStream, createMessage: contextMessage });
   };
   ctx.effect(() => capabilities.registerAdapter({ key: 'tool', display: '调用已安装工具', parameters: [
     { key: 'toolName', display: '工具名称', required: true }, { key: 'messageArgument', display: '消息参数名', defaultValue: 'text' },
@@ -97,7 +99,7 @@ export function apply(ctx, config = {}) {
         const input = textFor(rule);
         if (!input) continue;
         const selected = await selectEventCandidates({ settings, rule, parameters: updatedParameters, input, signal,
-          stream: options => ctx.llm.stream(options), createMessage: contextMessage });
+          stream: timedStream, createMessage: contextMessage });
         const applied = applyEventSelection(updatedParameters, rule, selected);
         updatedParameters = applied.parameters;
         selections.push(applied.selection);
@@ -160,7 +162,7 @@ export function apply(ctx, config = {}) {
       kind: 'exact', path: '/api/dsh-jev-context-gate/test',
       handler: createTestHandler((input, signal) => testChoice({
         settings: scope.get(), ...input, signal,
-        stream: options => ctx.llm.stream(options), createMessage: contextMessage,
+        stream: timedStream, createMessage: contextMessage,
       })),
     }));
     web.effect(() => web.webServer.register({
@@ -198,7 +200,7 @@ export function apply(ctx, config = {}) {
         if (!Array.isArray(candidates)) throw new Error(`Jev event parameter ${rule.candidateParameterKey} is unavailable`);
         const prepared = await generateQuestion(rule, input, signal, candidates);
         const entries = await rankCatalog({ settings, rule: prepared, entries: candidates, input, signal,
-          stream: options => ctx.llm.stream(options), createMessage: contextMessage });
+          stream: timedStream, createMessage: contextMessage });
         const messages = [...decision.messages];
         if (rule.selectionAction === 'prune') messages[catalogIndex] = pruneCatalogMessage(catalog, entries, escapeText);
         else if (entries.length) {
@@ -220,7 +222,7 @@ export function apply(ctx, config = {}) {
         const candidates = await resolveCandidates(rule, input, signal);
         const prepared = await generateQuestion(rule, input, signal, candidates);
         const selected = await rankCatalog({ settings, rule: prepared, entries: candidates, input, signal,
-          stream: options => ctx.llm.stream(options), createMessage: contextMessage });
+          stream: timedStream, createMessage: contextMessage });
         if (!selected.length) continue;
         const text = selectedText(rule, selected);
         if (text.length > settings.maxContextCharacters) throw new Error('Selected candidate content exceeds context budget');

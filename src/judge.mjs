@@ -22,7 +22,7 @@ export async function judge({ settings, phase, text, inputs, preparedRules, sign
     messages: [createMessage(JSON.stringify({ event: phase, items }))],
   };
   let output = ''; let finished = false;
-  for await (const chunk of stream(options)) {
+  for await (const chunk of stream(options, { operation: phase, rules: rules.map(rule => ({ id: rule.id, title: rule.title || rule.id })) })) {
     combined.throwIfAborted();
     if (chunk.type === 'tool-call-delta' || (chunk.type === 'block-start' && chunk.blockType === 'tool-call')) throw new Error('Judgement must not call tools');
     if (chunk.type === 'text-delta') output += chunk.text;

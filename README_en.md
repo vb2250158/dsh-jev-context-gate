@@ -6,6 +6,8 @@ Smart Rules for DSH (package `dsh-jev-context-gate`). Settings → 智能规则 
 
 ## Context lifecycle policy
 
+Version 0.1.37 optionally labels each auxiliary model call for Chat Enhancement 0.3.77 statistics. Expand individual calls to distinguish candidate selection, input classification, skill injection, tool checks and response checks, including configured rule names and IDs. Labels stay outside provider requests and exclude questions, inputs, candidate content and responses. Without the statistics plugin, model calls use their original entry.
+
 State previews shorten structured arrays without truncating unparsed facts or authorization text. If the preview cannot meet its budget, the original remains for ordinary compaction.
 
 Publication order determines the latest value even after a surface-head replacement. Session copies bind reads to local sequence numbers; runtime state reuses its complete logged sections and other views carry captured text. Legacy copies missing their original stay visible and require a source refresh before full-detail reads.

@@ -43,7 +43,7 @@ export async function rankCatalog({ settings, rule, entries, input, signal, stre
       }))],
   };
   let output = '', finished = false;
-  for await (const chunk of stream(options)) {
+  for await (const chunk of stream(options, { operation: rule.phase, rules: [{ id: rule.id, title: rule.title || rule.id }] })) {
       signal.throwIfAborted();
       if (chunk.type === 'tool-call-delta' || (chunk.type === 'block-start' && chunk.blockType === 'tool-call')) throw new Error('Catalog judgement must not call tools');
       if (chunk.type === 'text-delta') output += chunk.text;

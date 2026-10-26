@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.1.37
+
+- 向可选会话计时服务提供逐次模型调用的用途、规则名称与 ID；不修改提供方参数或判断行为。
+- Label each model call with its purpose and configured rule names and IDs through the optional timing service, without changing provider requests or rule decisions.
+
 ## 0.1.36
 
 - 压缩后在同一次请求中恢复完整项目指令和技能目录；相同文件版本与正文的重复批次撤下并计量。
