@@ -3,10 +3,10 @@ import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { modeForModel } from '../mode.mjs'
 import styles from './JevSettingsSection.module.css'
 
-type ChoiceResult = { mode: 'llm-json'; model: string; question: string; selected: string; confidence: number; confidenceKind: string; options: { id: string; label: string; probability: number }[]; durationMs: number }
+type ChoiceResult = { mode: 'llm-json' | 'jev-native'; model: string; question: string; selected: string; confidence: number; confidenceKind: string; options: { id: string; label: string; probability: number }[]; durationMs: number }
 
 export type JevTestPageProps = {
-  model?: { provider: string; model: string }
+  model?: { provider: string; model: string; decisionApi?: { enabled: boolean; model: string } }
   onBack: () => void
 }
 
@@ -20,7 +20,8 @@ export function JevTestPage({ model, onBack }: JevTestPageProps): React.ReactNod
   const [testing, setTesting] = React.useState(false)
   const resultRef = React.useRef<HTMLDivElement>(null)
   const generation = React.useRef(0)
-  const mode = modeForModel(model?.model ?? '')
+  const mode = modeForModel(model?.model ?? '', model?.decisionApi)
+  const configured = model?.decisionApi?.enabled || Boolean(model?.provider && model.model) && mode !== 'jev-native'
   const percent = (value: number): string => `${(value * 100).toFixed(1)}%`
 
   React.useEffect(() => () => { generation.current += 1 }, [])
@@ -31,7 +32,7 @@ export function JevTestPage({ model, onBack }: JevTestPageProps): React.ReactNod
     setError(undefined)
   }
   const runTest = (): void => {
-    if (testing || !model?.provider || !model.model || mode === 'jev-native') return
+    if (testing || !configured) return
     const request = ++generation.current
     setTesting(true)
     setResult(undefined)
@@ -56,19 +57,19 @@ export function JevTestPage({ model, onBack }: JevTestPageProps): React.ReactNod
     </header>
     <div className={styles.panel}>
       <div className={styles.sectionHeading}><h3>测试一道选择题</h3><p>测试只调用已配置的判定模型，不写入会话，也不执行规则。</p></div>
-      <div className={styles.testModel}><span>判定模型：{model?.provider && model.model ? `${model.provider} · ${model.model}` : '未选择，请返回规则配置页选择'}</span><span className={styles.modeBadge}>{mode === 'jev-native' ? 'Jev 原生' : mode === 'llm-json' ? 'LLM JSON 模拟' : '待配置'}</span></div>
+      <div className={styles.testModel}><span>判定模型：{model?.decisionApi?.enabled ? `OpenRouter · ${model.decisionApi.model}` : model?.provider && model.model ? `${model.provider} · ${model.model}` : '未选择，请返回规则配置页选择'}</span><span className={styles.modeBadge}>{mode === 'jev-native' ? 'Jev 原生' : mode === 'llm-json' ? 'LLM JSON 模拟' : '待配置'}</span></div>
       <label className={styles.field}>待判断的内容<textarea className={styles.textarea} rows={4} value={state} maxLength={24000} placeholder="粘贴一段消息、工单或其他文本" onChange={event => { setState(event.currentTarget.value); clearResult() }} /></label>
       <label className={styles.field}>题目<Input value={question} maxLength={2000} placeholder="例如：这条消息最需要哪类处理？" onChange={event => { setQuestion(event.currentTarget.value); clearResult() }} /></label>
       <div className={styles.field}><span>选项</span><div className={styles.optionEditor}>{options.map((option, index) =>
         <div className={styles.optionEditRow} key={index}><span className={styles.optionIndex}>{String.fromCharCode(65 + index)}</span><Input aria-label={`选项 ${index + 1}`} value={option} maxLength={800} onChange={event => { const value = event.currentTarget.value; setOptions(values => values.map((item, i) => i === index ? value : item)); clearResult() }} /><Button variant="ghost" size="sm" disabled={options.length <= 2} onClick={() => { setOptions(values => values.filter((_, i) => i !== index)); clearResult() }}>移除</Button></div>
       )}</div><Button variant="outline" size="sm" disabled={options.length >= 16} onClick={() => { setOptions(values => [...values, '']); clearResult() }}>添加选项</Button></div>
-      <div className={styles.testActions}><Button variant="primary" size="sm" disabled={testing || mode === 'jev-native' || !model?.provider || !model.model || !state.trim() || !question.trim() || options.some(option => !option.trim())} onClick={runTest}>{testing ? '正在测试…' : '运行测试'}</Button><span className={styles.note}>{mode === 'jev-native' ? '已识别 Jev 原生模式；测试仍需模型提供商接入原生结构化调用。' : '普通模型的选项概率是模型估计值，未经校准。'}</span></div>
+      <div className={styles.testActions}><Button variant="primary" size="sm" disabled={testing || !configured || !state.trim() || !question.trim() || options.some(option => !option.trim())} onClick={runTest}>{testing ? '正在测试…' : '运行测试'}</Button><span className={styles.note}>{mode === 'jev-native' ? '直接读取 Jev 返回的选项概率和置信度。' : '普通模型的选项概率是模型估计值，未经校准。'}</span></div>
       {error && <p className={styles.error} role="alert">测试失败：{error}</p>}
       {result && <div ref={resultRef} className={styles.testResult} aria-label="测试结果">
-        <div className={styles.resultHeading}><div><span className={styles.resultEyebrow}>模型选择</span><strong>{result.options.find(option => option.id === result.selected)?.label ?? '无结果'}</strong></div><div><span className={styles.resultEyebrow}>选项集中度</span><strong>{percent(result.confidence)}</strong></div></div>
+        <div className={styles.resultHeading}><div><span className={styles.resultEyebrow}>模型选择</span><strong>{result.options.find(option => option.id === result.selected)?.label ?? '无结果'}</strong></div><div><span className={styles.resultEyebrow}>{result.confidenceKind === 'native-confidence' ? 'Jev 置信度' : '选项集中度'}</span><strong>{percent(result.confidence)}</strong></div></div>
         <p className={styles.note}>题目：{result.question}</p>
         <div className={styles.resultOptions}>{result.options.map(option => <div className={styles.resultOption} key={option.id}><div><span>{option.label}</span><strong>{percent(option.probability)}</strong></div><div className={styles.barTrack}><div className={styles.barFill} style={{ width: percent(option.probability) }} /></div></div>)}</div>
-        <p className={styles.resultFootnote}>集中度由选项概率分布计算，不能表示答对概率或 Jev 的校准置信度。模型：{result.model} · 耗时 {result.durationMs} 毫秒</p>
+        <p className={styles.resultFootnote}>{result.confidenceKind === 'native-confidence' ? '置信度由 Jev 原生接口返回。' : '集中度由选项概率分布计算，不能表示答对概率。'}模型：{result.model} · 耗时 {result.durationMs} 毫秒</p>
       </div>}
     </div>
   </section>

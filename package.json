@@ -1,6 +1,6 @@
 {
   "name": "dsh-jev-context-gate",
-  "version": "0.1.37",
+  "version": "0.1.38",
   "description": "Data-driven preflight and evidence-aware context gates for DeepSeek Harness",
   "type": "module",
   "main": "lib/index.js",
@@ -62,6 +62,7 @@
   },
   "dependencies": {},
   "peerDependencies": {
+    "@deepseek-ai/dsh-credentials": ">=0.2.1-alpha.1 <0.3.0",
     "@deepseek-ai/cordis": ">=4.0.5-alpha.1 <5.0.0",
     "@deepseek-ai/dsh-llm": ">=0.2.1-alpha.1 <0.3.0",
     "@deepseek-ai/dsh-tools": ">=0.2.1-alpha.1 <0.3.0",

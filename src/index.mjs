@@ -21,7 +21,7 @@ import { createTimedModelStream } from './timed-model.mjs';
 export { Config, DEFAULT_SETTINGS, SETTINGS_NAMESPACE, SettingsSchema } from './settings.mjs';
 export { evaluatePolicy } from './policy.mjs';
 export const name = 'dsh-jev-context-gate';
-export const inject = ['settings', 'llm', 'skills', 'tools', 'tokenMeter'];
+export const inject = ['settings', 'llm', 'skills', 'tools', 'tokenMeter', 'credentials'];
 const contextMessage = (text, source = { kind: `plugin:${name}`, form: 'instructions' }) => createUserMessage({ content: [{ type: 'text', text }], source });
 const selectedText = (rule, selected) => {
   const items = selected.map(entry => `- ${entry.description}`).join('\n');

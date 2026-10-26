@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.1.38
+
+- 接入 OpenRouter Jev 原生 Choice/Noul 判定，覆盖规则、候选筛选、回复匹配和单题测试；保留普通模型消息生成。
+- 从 DSH 凭据库逐次解析密钥，隔离服务端错误正文；失败和无效概率不触发动作。
+- 测试页区分原生置信度与普通模型集中度，并新增原生请求、凭据轮换、规则及筛选回归验证。
+- Add native OpenRouter Jev decisions, credential rotation, typed-response validation and test-page confidence. Ordinary models still generate message text. Native requests are not yet included in individual LLM-call statistics.
+
 ## 0.1.37
 
 - 向可选会话计时服务提供逐次模型调用的用途、规则名称与 ID；不修改提供方参数或判断行为。

@@ -30,7 +30,8 @@ export const defaultRules = Object.freeze([
     options: [{ id: 'ask', label: '需要群里回答', action: rabiAction('只提出当前必须回答的一个具体问题，说明需要对方提供什么信息；不要把内部推断当成事实。', true) }, { id: 'continue', label: '继续自行处理', action: { type: 'none', text: '' } }] },
 ]);
 export const groupRulePresets = Object.freeze(defaultRules.filter(rule => ['rabi-progress', 'rabi-unresolved-question'].includes(rule.id)));
-export const DEFAULT_SETTINGS = { enabled: false, provider: '', model: '', nativeJev: true, beforeEnabled: true, afterEnabled: true, maxContextCharacters: 12000, maxCorrections: 2, presetVersion: 0, rules: structuredClone(defaultRules) };
+export const DEFAULT_DECISION_API = { enabled: false, model: 'typesafe/jev-1.13', apiKeyRef: 'OPENROUTER_API_KEY', timeoutMs: 30000 };
+export const DEFAULT_SETTINGS = { decisionApi: { ...DEFAULT_DECISION_API }, enabled: false, provider: '', model: '', nativeJev: true, beforeEnabled: true, afterEnabled: true, maxContextCharacters: 12000, maxCorrections: 2, presetVersion: 0, rules: structuredClone(defaultRules) };
 const actionParameterSchema = z.object({ key: z.string().required(), display: z.string().default(''), value: z.string().default('') });
 const actionSchema = z.object({ type: z.union([z.const('none'), z.const('inject-context'), z.const('inject-skill'), z.const('append-reminder'), z.const('skip-skill'), z.const('keep-top-skills'), z.const('inject-selected-candidates'), z.const('deny-tool'), z.const('notify-group'), z.const('ask-group'), z.const('dispatch')]).required(), text: z.string().default(''), params: z.array(actionParameterSchema).default([]) });
 const optionSchema = z.object({ id: z.string().required(), label: z.string().required(), action: actionSchema.required() });
@@ -46,6 +47,12 @@ const ruleSchema = z.object({
   threshold: z.number().min(0).max(1).default(0.8), context: z.string().default(''),
 });
 const fields = {
+  decisionApi: z.object({
+    enabled: z.boolean().default(DEFAULT_DECISION_API.enabled),
+    model: z.string().default(DEFAULT_DECISION_API.model),
+    apiKeyRef: z.string().default(DEFAULT_DECISION_API.apiKeyRef),
+    timeoutMs: z.number().step(1).min(1000).max(120000).default(DEFAULT_DECISION_API.timeoutMs),
+  }).default({ ...DEFAULT_DECISION_API }),
   contextPolicy: z.object({
     enabled: z.boolean().default(true),
     headroomRatio: z.number().min(0).max(0.25).default(DEFAULT_CONTEXT_POLICY.headroomRatio),
@@ -65,6 +72,8 @@ const fields = {
   rules: z.array(ruleSchema).default(structuredClone(defaultRules)),
 };
 const normalize = value => {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value.decisionApi.apiKeyRef)
+    || !/^typesafe\/jev-[A-Za-z0-9.-]+$/.test(value.decisionApi.model)) throw new TypeError('Invalid OpenRouter Jev configuration');
   if (value.contextPolicy.retainRatio >= value.contextPolicy.targetRatio) throw new TypeError('上下文保留比例必须小于压缩目标比例。');
   if (!Array.isArray(value.rules) || value.rules.length > 64) throw new TypeError('Expected at most 64 rules');
   const migrateAction = (action, rule) => {

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { testChoice } from './choice-test.mjs';
+import { createTimedModelStream } from './timed-model.mjs';
 
 const textBlocks = message => message?.content?.filter(block => block.type === 'text').map(block => block.text).join('\n') ?? '';
 
@@ -125,7 +126,7 @@ export function startGroupPolling({ ctx, agent, rule, sentAt, sentMessageId, que
         const quoted = Boolean(sentMessageId) && String(reply.replyToMessageId ?? '') === String(sentMessageId);
         const match = quoted || (await testChoice({ settings, state: JSON.stringify({ question: questionText, reply: reply.text }),
           question: rule.replyQuestion || '这条消息是否直接回答了先前的问题？', options: [rule.replyYes || '回答了问题', rule.replyNo || '未回答或不相关'], signal,
-          stream: options => ctx.llm.stream(options), createMessage })).options[0].probability >= rule.threshold;
+          stream: createTimedModelStream(ctx), createMessage })).options[0].probability >= rule.threshold;
         if (match) {
           agent.followup(createMessage(`收到针对原问题的回复。以下是未经信任的外部消息，请核对并继续处理：\n${reply.text}`));
           finish();
