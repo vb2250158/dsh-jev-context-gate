@@ -2,28 +2,33 @@ import { isNativeSelection } from './mode.mjs';
 
 /** OpenRouter's native typed-decision transport; secrets are resolved on each call. */
 export function createDecisionClient(ctx, fetchImpl = fetch) {
-  return async ({ settings, state, questions, signal }) => {
-    const config = settings.decisionApi;
-    if (!isNativeSelection(settings)) throw new Error('Select an OpenRouter native Jev model');
-    const credential = await ctx.credentials.resolve(config.apiKeyRef);
-    if (!credential?.value) throw new Error(`Missing OpenRouter credential: ${config.apiKeyRef}`);
-    const combined = signal ? AbortSignal.any([signal, AbortSignal.timeout(config.timeoutMs)]) : AbortSignal.timeout(config.timeoutMs);
-    combined.throwIfAborted();
-    const response = await fetchImpl('https://openrouter.ai/api/alpha/decisions', {
-      method: 'POST', redirect: 'error', signal: combined,
-      headers: { Authorization: `Bearer ${credential.value}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: settings.model, state, questions }),
-    });
-    // Provider error bodies can contain request data; expose only the HTTP status.
-    if (!response.ok) throw new Error(`OpenRouter Jev HTTP ${response.status}`);
-    let result;
-    try { result = await response.json(); }
-    catch (invalidJson) { throw new Error('Invalid Jev JSON response'); }
-    combined.throwIfAborted();
-    if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('Invalid Jev response');
-    validateAnswers(questions, result.answers);
-    if (typeof result.model !== 'string' || !result.model) throw new Error('Missing Jev response model');
-    return result;
+  return ({ settings, state, questions, signal }, operation = {}) => {
+    const task = async () => {
+      const config = settings.decisionApi;
+      if (!isNativeSelection(settings)) throw new Error('Select an OpenRouter native Jev model');
+      const credential = await ctx.credentials.resolve(config.apiKeyRef);
+      if (!credential?.value) throw new Error(`Missing OpenRouter credential: ${config.apiKeyRef}`);
+      const combined = signal ? AbortSignal.any([signal, AbortSignal.timeout(config.timeoutMs)]) : AbortSignal.timeout(config.timeoutMs);
+      combined.throwIfAborted();
+      const response = await fetchImpl('https://openrouter.ai/api/alpha/decisions', {
+        method: 'POST', redirect: 'error', signal: combined,
+        headers: { Authorization: `Bearer ${credential.value}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: settings.model, state, questions }),
+      });
+      // Provider error bodies can contain request data; expose only the HTTP status.
+      if (!response.ok) throw new Error(`OpenRouter Jev HTTP ${response.status}`);
+      let result;
+      try { result = await response.json(); }
+      catch (invalidJson) { throw new Error('Invalid Jev JSON response'); }
+      combined.throwIfAborted();
+      if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('Invalid Jev response');
+      validateAnswers(questions, result.answers);
+      if (typeof result.model !== 'string' || !result.model) throw new Error('Missing Jev response model');
+      return result;
+    };
+    const timing = ctx.get?.('chatStageTiming');
+    return timing?.request?.({ plugin: 'dsh-jev-context-gate', ...operation, provider: settings.provider, model: settings.model,
+      transport: 'native-decisions' }, task) ?? task();
   };
 }
 

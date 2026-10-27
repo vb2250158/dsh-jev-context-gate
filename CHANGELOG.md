@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.1.41
+
+- 增加可选的输入预处理内部计时：规则、候选来源、问题生成和技能快照；保留判定和注入行为。
+- Add optional own-work preprocessing timings for rules, candidate sources, question generation and skill snapshots without changing decisions or injections.
+
+
 ## 0.1.40
 
 - 原生和普通模型统一到原判定模型下拉，原生概率模型前置，普通模型标注“兼容模式”，移除独立原生开关。

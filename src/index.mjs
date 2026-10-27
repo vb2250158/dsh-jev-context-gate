@@ -46,7 +46,8 @@ export function apply(ctx, config = {}) {
       const input = await inputFor(rule);
       if (!input) continue;
       try {
-        rules.push(await generateQuestion(rule, input, signal));
+        const prepare = () => generateQuestion(rule, input, signal);
+        rules.push(await (ctx.get('chatStageTiming')?.run?.({ plugin: name, operation: 'question-provider' }, prepare) ?? prepare()));
         inputs[rule.id] = input;
       } catch (error) {
         ctx.logger.warn(`Jev question script failed for ${rule.id}: ${error instanceof Error ? error.message : 'unknown error'}`);
@@ -182,98 +183,102 @@ export function apply(ctx, config = {}) {
       },
     }));
   });
-  ctx.on('agent/pre-step', async ({ agent, signal }, next) => {
+  ctx.on('agent/pre-step', async ({ agent, turn, step, signal }, next) => {
     let decision = await next();
-    const settings = scope.get();
-    if (decision.kind !== 'enter' || !settings.enabled || signal.aborted) return decision;
-    const catalogRules = validateRules(settings.rules).filter(rule => rule.enabled && rule.phase === 'skill-catalog');
-    for (const rule of catalogRules) {
-      const catalogIndex = decision.messages.findIndex(message => message.source?.kind === 'skill-catalog');
-      if (catalogIndex < 0) break;
-      const catalog = decision.messages[catalogIndex];
-      if (!catalog.source.entries.length) continue;
-      const input = catalogInput(rule, agent, decision.messages, settings.maxContextCharacters);
-      if (!input) continue;
-      try {
-        const eventParameters = { skills: catalog.source.entries };
-        const candidates = eventParameters[rule.candidateParameterKey];
-        if (!Array.isArray(candidates)) throw new Error(`Jev event parameter ${rule.candidateParameterKey} is unavailable`);
-        const prepared = await generateQuestion(rule, input, signal, candidates);
-        const entries = await rankCatalog({ settings, rule: prepared, entries: candidates, input, signal,
-          stream: timedStream, createMessage: contextMessage });
-        const messages = [...decision.messages];
-        if (rule.selectionAction === 'prune') messages[catalogIndex] = pruneCatalogMessage(catalog, entries, escapeText);
-        else if (entries.length) {
-          const text = selectedText(rule, entries);
-          if (text.length > settings.maxContextCharacters) throw new Error('Selected candidate content exceeds context budget');
-          messages.splice(catalogIndex + 1, 0, contextMessage(text));
+    const timed = (operation, task) => ctx.get('agentPreStepTiming')?.run({ agent, turn, step },
+      { plugin: 'dsh-jev-context-gate', operation }, task) ?? task();
+    return timed('input-rules', async () => {
+      const settings = scope.get();
+      if (decision.kind !== 'enter' || !settings.enabled || signal.aborted) return decision;
+      const catalogRules = validateRules(settings.rules).filter(rule => rule.enabled && rule.phase === 'skill-catalog');
+      for (const rule of catalogRules) {
+        const catalogIndex = decision.messages.findIndex(message => message.source?.kind === 'skill-catalog');
+        if (catalogIndex < 0) break;
+        const catalog = decision.messages[catalogIndex];
+        if (!catalog.source.entries.length) continue;
+        const input = catalogInput(rule, agent, decision.messages, settings.maxContextCharacters);
+        if (!input) continue;
+        try {
+          const eventParameters = { skills: catalog.source.entries };
+          const candidates = eventParameters[rule.candidateParameterKey];
+          if (!Array.isArray(candidates)) throw new Error(`Jev event parameter ${rule.candidateParameterKey} is unavailable`);
+          const prepared = await timed('question-provider', () => generateQuestion(rule, input, signal, candidates));
+          const entries = await rankCatalog({ settings, rule: prepared, entries: candidates, input, signal,
+            stream: timedStream, createMessage: contextMessage });
+          const messages = [...decision.messages];
+          if (rule.selectionAction === 'prune') messages[catalogIndex] = pruneCatalogMessage(catalog, entries, escapeText);
+          else if (entries.length) {
+            const text = selectedText(rule, entries);
+            if (text.length > settings.maxContextCharacters) throw new Error('Selected candidate content exceeds context budget');
+            messages.splice(catalogIndex + 1, 0, contextMessage(text));
+          }
+          decision = { ...decision, messages };
+        } catch (error) {
+          signal.throwIfAborted();
+          ctx.logger.warn(`Jev Skill catalog rule ${rule.id} failed: ${error instanceof Error ? error.message : 'unknown error'}`);
         }
-        decision = { ...decision, messages };
-      } catch (error) {
-        signal.throwIfAborted();
-        ctx.logger.warn(`Jev Skill catalog rule ${rule.id} failed: ${error instanceof Error ? error.message : 'unknown error'}`);
       }
-    }
-    const selectionRules = validateRules(settings.rules).filter(rule => rule.enabled && rule.phase === 'before' && rule.candidateSource !== 'none');
-    for (const rule of selectionRules) {
-      const input = catalogInput(rule, agent, decision.messages, settings.maxContextCharacters);
-      if (!input) continue;
+      const selectionRules = validateRules(settings.rules).filter(rule => rule.enabled && rule.phase === 'before' && rule.candidateSource !== 'none');
+      for (const rule of selectionRules) {
+        const input = catalogInput(rule, agent, decision.messages, settings.maxContextCharacters);
+        if (!input) continue;
+        try {
+          const candidates = await timed('candidate-source', () => resolveCandidates(rule, input, signal));
+          const prepared = await timed('question-provider', () => generateQuestion(rule, input, signal, candidates));
+          const selected = await rankCatalog({ settings, rule: prepared, entries: candidates, input, signal,
+            stream: timedStream, createMessage: contextMessage });
+          if (!selected.length) continue;
+          const text = selectedText(rule, selected);
+          if (text.length > settings.maxContextCharacters) throw new Error('Selected candidate content exceeds context budget');
+          const messages = [...decision.messages];
+          const explicitSkillIndex = messages.findIndex(message => message.source?.kind === 'skill-invocation');
+          messages.splice(explicitSkillIndex < 0 ? messages.length : explicitSkillIndex, 0, contextMessage(text));
+          decision = { ...decision, messages };
+        } catch (error) {
+          signal.throwIfAborted();
+          ctx.logger.warn(`Jev candidate rule ${rule.id} failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+        }
+      }
+      if (!settings.rules.some(rule => rule.enabled && rule.phase === 'before' && (rule.candidateSource ?? 'none') === 'none')) return decision;
       try {
-        const candidates = await resolveCandidates(rule, input, signal);
-        const prepared = await generateQuestion(rule, input, signal, candidates);
-        const selected = await rankCatalog({ settings, rule: prepared, entries: candidates, input, signal,
-          stream: timedStream, createMessage: contextMessage });
-        if (!selected.length) continue;
-        const text = selectedText(rule, selected);
-        if (text.length > settings.maxContextCharacters) throw new Error('Selected candidate content exceeds context budget');
+        const needsSkillSummaries = settings.rules.some(rule => rule.enabled && rule.phase === 'before' && rule.input === 'user-message-with-skills');
+        let snapshot = { skills: [], complete: true };
+        if (needsSkillSummaries) {
+          try { snapshot = await timed('skill-snapshot', () => ctx.skills.snapshot({ cwd: agent.session.header.cwd, signal, scope: agent })); }
+          catch (error) {
+            signal.throwIfAborted();
+            ctx.logger.warn(`Jev skill catalog unavailable: ${error instanceof Error ? error.message : 'unknown error'}`);
+            snapshot = { skills: [], complete: false };
+          }
+        }
+        const result = await timed('before', () => runRules(settings, 'before', rule => beforeInput(rule, decision.messages, snapshot.complete ? snapshot.skills : []), signal));
+        signal.throwIfAborted();
+        const selected = await resolveSkillRequests({
+          requests: result.skillRequests ?? [], existingMessages: decision.messages, skills: ctx.skills, agent, signal,
+          maxCharacters: settings.maxContextCharacters, usedCharacters: result.context.length,
+          render: renderSkillContent, createMessage: contextMessage,
+          beforeInject: settings.rules.some(rule => rule.enabled && rule.phase === 'skill-injection')
+            ? async skill => {
+              const skillResult = await runRules(settings, 'skill-injection', rule => skillInput(rule, skill, decision.messages), signal);
+              if (!skillResult.decisions?.length) throw new Error('Skill injection rules produced no judgement');
+              return { skip: skillResult.skipSkill, context: skillResult.context };
+            }
+            : undefined,
+        });
+        for (const outcome of selected.outcomes.filter(row => ['skill-unavailable', 'budget-exceeded', 'skill-judgement-unavailable'].includes(row.status)))
+          ctx.logger.warn(`Jev skill injection ${outcome.status} for rule ${outcome.ruleId}.`);
+        const additions = [...(result.context ? [contextMessage(result.context)] : []), ...selected.messages];
+        if (!additions.length) return decision;
         const messages = [...decision.messages];
         const explicitSkillIndex = messages.findIndex(message => message.source?.kind === 'skill-invocation');
-        messages.splice(explicitSkillIndex < 0 ? messages.length : explicitSkillIndex, 0, contextMessage(text));
-        decision = { ...decision, messages };
-      } catch (error) {
+        messages.splice(explicitSkillIndex < 0 ? messages.length : explicitSkillIndex, 0, ...additions);
+        return { ...decision, messages };
+      } catch {
         signal.throwIfAborted();
-        ctx.logger.warn(`Jev candidate rule ${rule.id} failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+        ctx.logger.warn('Jev user-message judgement unavailable; no context injected. Check model configuration and test page.');
+        return decision;
       }
-    }
-    if (!settings.rules.some(rule => rule.enabled && rule.phase === 'before' && (rule.candidateSource ?? 'none') === 'none')) return decision;
-    try {
-      const needsSkillSummaries = settings.rules.some(rule => rule.enabled && rule.phase === 'before' && rule.input === 'user-message-with-skills');
-      let snapshot = { skills: [], complete: true };
-      if (needsSkillSummaries) {
-        try { snapshot = await ctx.skills.snapshot({ cwd: agent.session.header.cwd, signal, scope: agent }); }
-        catch (error) {
-          signal.throwIfAborted();
-          ctx.logger.warn(`Jev skill catalog unavailable: ${error instanceof Error ? error.message : 'unknown error'}`);
-          snapshot = { skills: [], complete: false };
-        }
-      }
-      const result = await runRules(settings, 'before', rule => beforeInput(rule, decision.messages, snapshot.complete ? snapshot.skills : []), signal);
-      signal.throwIfAborted();
-      const selected = await resolveSkillRequests({
-        requests: result.skillRequests ?? [], existingMessages: decision.messages, skills: ctx.skills, agent, signal,
-        maxCharacters: settings.maxContextCharacters, usedCharacters: result.context.length,
-        render: renderSkillContent, createMessage: contextMessage,
-        beforeInject: settings.rules.some(rule => rule.enabled && rule.phase === 'skill-injection')
-          ? async skill => {
-            const skillResult = await runRules(settings, 'skill-injection', rule => skillInput(rule, skill, decision.messages), signal);
-            if (!skillResult.decisions?.length) throw new Error('Skill injection rules produced no judgement');
-            return { skip: skillResult.skipSkill, context: skillResult.context };
-          }
-          : undefined,
-      });
-      for (const outcome of selected.outcomes.filter(row => ['skill-unavailable', 'budget-exceeded', 'skill-judgement-unavailable'].includes(row.status)))
-        ctx.logger.warn(`Jev skill injection ${outcome.status} for rule ${outcome.ruleId}.`);
-      const additions = [...(result.context ? [contextMessage(result.context)] : []), ...selected.messages];
-      if (!additions.length) return decision;
-      const messages = [...decision.messages];
-      const explicitSkillIndex = messages.findIndex(message => message.source?.kind === 'skill-invocation');
-      messages.splice(explicitSkillIndex < 0 ? messages.length : explicitSkillIndex, 0, ...additions);
-      return { ...decision, messages };
-    } catch {
-      signal.throwIfAborted();
-      ctx.logger.warn('Jev user-message judgement unavailable; no context injected. Check model configuration and test page.');
-      return decision;
-    }
+    });
   }, { global: true, prepend: true });
   ctx.on('llm/stream', (options, next) => {
     const settings = scope.get();

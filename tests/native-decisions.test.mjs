@@ -12,6 +12,21 @@ const answer = { type: 'choice', choice: 'yes', probabilities: { yes: 0.9, no: 0
 const wire = answers => ({ model: 'typesafe/jev-1.13-20260917', answers, usage: { input_tokens: 42, output_tokens: 0 } });
 const context = resolve => ({ credentials: { resolve: resolve ?? (async () => ({ value: 'fixture-key' })) } });
 
+test('native probability calls provide separate timing labels without retaining state or credentials', async () => {
+  const labels = [], ctx = { ...context(), get: () => ({ request(label, task) { labels.push(label); return task(); } }) };
+  let count = 0;
+  const decide = createDecisionClient(ctx, async () => { count++; return Response.json(wire({ check: answer })); });
+  const operation = { operation: 'before', rules: [{ id: 'input', title: 'Input rule' }] };
+  const result = await decide({ settings, state: 'private-input', questions: { check: choice } }, operation);
+  assert.equal(count, 1);
+  assert.equal(result.answers.check.choice, 'yes');
+  assert.deepEqual(labels, [{ plugin: 'dsh-jev-context-gate', ...operation, provider: settings.provider,
+    model: settings.model, transport: 'native-decisions' }]);
+  assert.doesNotMatch(JSON.stringify(labels), /private-input|fixture-key|questions|criteria/);
+  const failure = new Error('fixture transport failure');
+  await assert.rejects(createDecisionClient(ctx, async () => { throw failure; })({ settings, state: 'private-input', questions: { check: choice } }), error => error === failure);
+});
+
 test('native requests resolve rotated credentials and send typed questions without chat messages', async () => {
   let key = 'fixture-first';
   const requests = [];

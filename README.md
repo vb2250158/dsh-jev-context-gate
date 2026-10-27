@@ -141,3 +141,7 @@ The plugin list shows **Smart rules** in English and **智能规则** in Chinese
 在插件列表中点击本插件进入详情页，即可使用原有配置和操作界面；设置菜单不再重复显示该插件入口。
 
 The icon uses a centered 36 × 36 viewBox to leave more space around the artwork inside the plugin icon frame.
+
+安装性能统计插件后，输入规则处理通过可选 `agentPreStepTiming` 服务记录插件自有耗时，并分别标记候选读取、问题生成脚本和技能目录快照；下游预处理不计入本插件耗时。统计只保存名称和时间，不保存输入或脚本内容。
+
+原生 Jev 概率 API 不经过 `llm/stream`。性能统计 0.1.3 或以上通过可选 `chatStageTiming.request` 分别记录每次原生判定的模型、用途、规则和请求耗时；整包返回不产生首 token 计时。
