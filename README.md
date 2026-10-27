@@ -4,15 +4,15 @@ This release requires DSH 0.2.1-alpha.1 or a compatible 0.2 release. See [compat
 
 [English](README_en.md) | 简体中文
 
-DSH 的智能规则插件（包名 `dsh-jev-context-gate`）。插件 → 智能规则 → 配置可配置事件判断、内容筛选和动作执行；DSH 0.2 的配置按插件入口 ID `dsh-jev-context-gate` 读写。选择独立判定模型后，按事件读取待判断内容、提出选择题，并执行获选选项配置的行为。普通模型使用 LLM JSON 估计选项概率；启用“OpenRouter Jev 原生判定”后，规则判断、候选筛选和测试页直接调用 Jev Decisions API；普通模型继续用于需要生成文本的动作。
+DSH 的智能规则插件（包名 `dsh-jev-context-gate`）。插件 → 智能规则 → 配置可配置事件判断、内容筛选和动作执行；DSH 0.2 的配置按插件入口 ID `dsh-jev-context-gate` 读写。选择独立判定模型后，按事件读取待判断内容、提出选择题，并执行获选选项配置的行为。普通模型使用 LLM JSON 估计选项概率；选择 OpenRouter Jev 原生概率模型后，规则判断、候选筛选和测试页直接调用 Jev Decisions API；普通模型继续用于需要生成文本的动作。
 
 ## OpenRouter Jev 原生判定
 
-0.1.38 在插件配置页提供原生判定开关。先在 DSH 凭据库保存 `OPENROUTER_API_KEY`，再启用开关；密钥不进入插件配置、请求日志或浏览器设置快照。原生模型默认 `typesafe/jev-1.13`，调用 `https://openrouter.ai/api/alpha/decisions`。普通模型仍负责外发消息文本，不使用 Jev 生成自由文本。
+在「插件 → 智能规则 → 判定模型」的同一个下拉列表中选择提供商和模型。原生概率模型排在最前，不加额外标识；普通模型标注“兼容模式”；选择 OpenRouter · Jev 1.13 后直接使用原生 Decisions API，选择普通模型则使用既有 LLM JSON 判定，不再提供独立原生开关。
 
-规则选项使用原生 Choice 概率，候选筛选使用每项独立的 Noul 概率，同一批候选一次提交；规则阈值、排序与保留数量不变。测试页展示服务返回的实际模型、选项概率、原生置信度与耗时。失败、拒答或无效概率不会触发规则动作，也不会自动改走收费的其他模型。
+先在 DSH 凭据库配置 `OPENROUTER_API_KEY`。`provider` 和 `model` 是当前判定模型的唯一选择；`decisionApi.apiKeyRef`、`decisionApi.timeoutMs` 只配置原生凭据引用和超时。0.1.38–0.1.39 的开关配置会迁移为 OpenRouter 模型选择，原普通模型保留在 `messageModel`，用于需要文本生成的动作。切换普通模型也会更新该文本模型；首次直接使用原生模型且未配置普通文本模型时，文本生成动作明确报错。
 
-`decisionApi` 配置字段为 `enabled`、`model`、`apiKeyRef`、`timeoutMs`，默认超时 30000 毫秒。关闭原生开关即恢复既有 LLM JSON 判定。原生调用不经过 `llm/stream`，目前不计入聊天增强的逐次 LLM 调用统计；测试页直接显示本次原生调用耗时。
+规则选项使用原生 Choice 概率，候选筛选使用每项独立的 Noul 概率，同一批候选一次提交；规则阈值、排序与保留数量不变。测试页展示服务返回的实际模型、选项概率、原生置信度与耗时。失败、拒答或无效概率不会触发规则动作，也不会自动改走其他模型。原生调用目前不计入聊天增强的逐次 LLM 调用统计。
 
 ## 统一上下文策略
 

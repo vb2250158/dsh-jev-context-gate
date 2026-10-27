@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.1.40
+
+- 原生和普通模型统一到原判定模型下拉，原生概率模型前置，普通模型标注“兼容模式”，移除独立原生开关。
+- 迁移既有原生配置，保留普通模型文本生成；新增切换、排序与配置回归。
+- Use one decision-model picker for native and ordinary models, prioritize native probabilities and label ordinary models as compatibility mode and migrate existing selections.
+
+
 ## 0.1.39
 
 - 修正限制说明中仍称原生 Jev 尚未接入的旧文字。

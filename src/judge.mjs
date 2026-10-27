@@ -1,11 +1,11 @@
 import { evaluatePolicy, validateRules } from './policy.mjs';
-import { modeForModel } from './mode.mjs';
+import { modeForModel, isNativeSelection } from './mode.mjs';
 
 /** Generic model scores are self-reported, never calibrated native confidence. */
 export async function judge({ settings, phase, text, inputs, preparedRules, signal, stream, createMessage }) {
-  const native = settings.decisionApi?.enabled;
+  const native = isNativeSelection(settings);
   if (!native && (!settings.provider || !settings.model)) throw new Error('Jev judgement model is not configured');
-  if (!native && modeForModel(settings.model) === 'jev-native') throw new Error('Native Jev model requires a structured provider adapter');
+  if (!native && modeForModel(settings.model, settings.provider) === 'jev-native') throw new Error('Native Jev model requires a structured provider adapter');
   const rules = validateRules(preparedRules ?? settings.rules).filter(rule => rule.enabled && rule.phase === phase && (inputs ? Boolean(inputs[rule.id]) : true));
   if (!['before', 'after', 'skill-injection', 'tool-before', 'tool-after', 'external'].includes(phase)) throw new Error('Invalid judgement phase');
   const items = rules.map(rule => ({

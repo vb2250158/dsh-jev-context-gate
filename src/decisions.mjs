@@ -1,8 +1,10 @@
+import { isNativeSelection } from './mode.mjs';
+
 /** OpenRouter's native typed-decision transport; secrets are resolved on each call. */
 export function createDecisionClient(ctx, fetchImpl = fetch) {
   return async ({ settings, state, questions, signal }) => {
     const config = settings.decisionApi;
-    if (!config?.enabled) throw new Error('Native Jev decisions are not enabled');
+    if (!isNativeSelection(settings)) throw new Error('Select an OpenRouter native Jev model');
     const credential = await ctx.credentials.resolve(config.apiKeyRef);
     if (!credential?.value) throw new Error(`Missing OpenRouter credential: ${config.apiKeyRef}`);
     const combined = signal ? AbortSignal.any([signal, AbortSignal.timeout(config.timeoutMs)]) : AbortSignal.timeout(config.timeoutMs);
@@ -10,7 +12,7 @@ export function createDecisionClient(ctx, fetchImpl = fetch) {
     const response = await fetchImpl('https://openrouter.ai/api/alpha/decisions', {
       method: 'POST', redirect: 'error', signal: combined,
       headers: { Authorization: `Bearer ${credential.value}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: config.model, state, questions }),
+      body: JSON.stringify({ model: settings.model, state, questions }),
     });
     // Provider error bodies can contain request data; expose only the HTTP status.
     if (!response.ok) throw new Error(`OpenRouter Jev HTTP ${response.status}`);

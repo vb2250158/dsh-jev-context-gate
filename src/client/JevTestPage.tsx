@@ -6,7 +6,7 @@ import styles from './JevSettingsSection.module.css'
 type ChoiceResult = { mode: 'llm-json' | 'jev-native'; model: string; question: string; selected: string; confidence: number; confidenceKind: string; options: { id: string; label: string; probability: number }[]; durationMs: number }
 
 export type JevTestPageProps = {
-  model?: { provider: string; model: string; decisionApi?: { enabled: boolean; model: string } }
+  model?: { provider: string; model: string }
   onBack: () => void
 }
 
@@ -20,8 +20,8 @@ export function JevTestPage({ model, onBack }: JevTestPageProps): React.ReactNod
   const [testing, setTesting] = React.useState(false)
   const resultRef = React.useRef<HTMLDivElement>(null)
   const generation = React.useRef(0)
-  const mode = modeForModel(model?.model ?? '', model?.decisionApi)
-  const configured = model?.decisionApi?.enabled || Boolean(model?.provider && model.model) && mode !== 'jev-native'
+  const mode = modeForModel(model?.model ?? '', model?.provider)
+  const configured = Boolean(model?.provider && model.model)
   const percent = (value: number): string => `${(value * 100).toFixed(1)}%`
 
   React.useEffect(() => () => { generation.current += 1 }, [])
@@ -57,7 +57,7 @@ export function JevTestPage({ model, onBack }: JevTestPageProps): React.ReactNod
     </header>
     <div className={styles.panel}>
       <div className={styles.sectionHeading}><h3>测试一道选择题</h3><p>测试只调用已配置的判定模型，不写入会话，也不执行规则。</p></div>
-      <div className={styles.testModel}><span>判定模型：{model?.decisionApi?.enabled ? `OpenRouter · ${model.decisionApi.model}` : model?.provider && model.model ? `${model.provider} · ${model.model}` : '未选择，请返回规则配置页选择'}</span><span className={styles.modeBadge}>{mode === 'jev-native' ? 'Jev 原生' : mode === 'llm-json' ? 'LLM JSON 模拟' : '待配置'}</span></div>
+      <div className={styles.testModel}><span>判定模型：{model?.provider && model.model ? `${model.provider} · ${model.model}` : '未选择，请返回规则配置页选择'}</span>{mode !== 'jev-native' && <span className={styles.modeBadge}>{mode === 'llm-json' ? '兼容模式' : '待配置'}</span>}</div>
       <label className={styles.field}>待判断的内容<textarea className={styles.textarea} rows={4} value={state} maxLength={24000} placeholder="粘贴一段消息、工单或其他文本" onChange={event => { setState(event.currentTarget.value); clearResult() }} /></label>
       <label className={styles.field}>题目<Input value={question} maxLength={2000} placeholder="例如：这条消息最需要哪类处理？" onChange={event => { setQuestion(event.currentTarget.value); clearResult() }} /></label>
       <div className={styles.field}><span>选项</span><div className={styles.optionEditor}>{options.map((option, index) =>

@@ -1,4 +1,4 @@
-import { modeForModel } from './mode.mjs';
+import { modeForModel, isNativeSelection } from './mode.mjs';
 
 /** Build the rule-selected text from visible conversation and pending step messages. */
 export function catalogInput(rule, agent, pending, maxCharacters) {
@@ -26,9 +26,9 @@ function textOf(message) {
 
 /** Score every option in one request and apply the configured selection target. */
 export async function rankCatalog({ settings, rule, entries, input, signal, stream, createMessage }) {
-  const native = settings.decisionApi?.enabled;
+  const native = isNativeSelection(settings);
   if (!native && (!settings.provider || !settings.model)) throw new Error('Jev judgement model is not configured');
-  if (!native && modeForModel(settings.model) === 'jev-native') throw new Error('Native Jev model requires a structured provider adapter');
+  if (!native && modeForModel(settings.model, settings.provider) === 'jev-native') throw new Error('Native Jev model requires a structured provider adapter');
   const target = rule.selectionMode || 'top';
   const value = Number(rule.selectionValue || rule.options?.[0]?.action?.text || '10');
   if (!entries.length) return [];

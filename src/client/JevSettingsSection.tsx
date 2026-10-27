@@ -4,14 +4,14 @@ import type { ModelCatalog } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import styles from './JevSettingsSection.module.css'
 import { modeForModel } from '../mode.mjs'
-import { DEFAULT_DECISION_API } from '../settings.mjs'
+import { modelChoices, selectionPatch } from '../model-selection.mjs'
 import { validateRules } from '../policy.mjs'
 import { groupRulePresets } from '../settings.mjs'
 import { JevTestPage } from './JevTestPage.tsx'
 import { JevRuleEditor } from './JevRuleEditor.tsx'
 import type { DraftRule, Rule } from './JevRuleEditor.tsx'
 
-export type Settings = { enabled: boolean; provider: string; model: string; decisionApi?: { enabled: boolean; model: string; apiKeyRef: string; timeoutMs: number }; nativeJev: boolean; beforeEnabled: boolean; afterEnabled: boolean; maxContextCharacters: number; maxCorrections: number; presetVersion: number; rules: Rule[] }
+export type Settings = { enabled: boolean; provider: string; model: string; decisionApi: { enabled: boolean; model: string; apiKeyRef: string; timeoutMs: number }; messageModel: { provider: string; model: string }; nativeJev: boolean; beforeEnabled: boolean; afterEnabled: boolean; maxContextCharacters: number; maxCorrections: number; presetVersion: number; rules: Rule[] }
 type Injected = { scope: ConfigForm<Settings>; loadCatalog: () => Promise<ModelCatalog> }
 export type JevSettingsSectionProps = Partial<Injected> & { close?: () => void }
 
@@ -86,7 +86,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
   const savedRules = current ? JSON.stringify(current.rules) : null
   const dirty = draftRules !== null && sourceRules !== null && JSON.stringify(draftRules) !== JSON.stringify(toDraft(JSON.parse(sourceRules) as Rule[]))
   const changedElsewhere = dirty && savedRules !== sourceRules
-  const modelMode = modeForModel(current?.model ?? '', current?.decisionApi)
+  const modelMode = modeForModel(current?.model ?? '', current?.provider)
 
   React.useEffect(() => {
     if (!current || (draftRules !== null && dirty)) return
@@ -149,10 +149,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
       if (generation === request.current) setLoadingCatalog(false)
     })
   }
-  const models = catalog?.groups.flatMap(group => group.models.map(model => ({
-    id: JSON.stringify([group.id, model.id]), provider: group.id, model: model.id,
-    label: `${group.name} · ${model.name}`,
-  }))) ?? []
+  const models = modelChoices(catalog)
   const patch = (value: Partial<Settings>): void => {
     if (!writable || savingRef.current) return
     savingRef.current = true
@@ -174,28 +171,27 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
       <div className={styles.panel}>
         <div className={styles.sectionHeading}><h3>运行设置</h3></div>
         <div className={styles.row}><span>启用智能规则</span><Switch checked={current.enabled} disabled={!writable} label="启用智能规则" onChange={enabled => patch({ enabled })} /></div>
-        <div className={styles.row}><span>OpenRouter Jev 原生判定</span><Switch checked={current.decisionApi?.enabled ?? false} disabled={!writable} label="OpenRouter Jev 原生判定" onChange={enabled => patch({ decisionApi: { ...DEFAULT_DECISION_API, ...current.decisionApi, enabled } })} /></div>
-        <div className={styles.modelField}><span>{current.decisionApi?.enabled ? '消息生成模型' : '判定模型'}</span>
+        <div className={styles.modelField}><span>判定模型</span>
           <Menu autoFocus portal open={modelMenuOpen && writable} onClose={() => setModelMenuOpen(false)}
             selectedId={current.provider || current.model ? JSON.stringify([current.provider, current.model]) : 'unconfigured'}
             onSelect={id => {
-              if (id === 'unconfigured') patch({ provider: '', model: '' })
+              if (id === 'unconfigured') patch(selectionPatch(current, { provider: '', model: '' }))
               else {
                 const selected = models.find(model => model.id === id)
                 if (!selected) return
-                patch({ provider: selected.provider, model: selected.model })
+                patch(selectionPatch(current, selected))
               }
               setModelMenuOpen(false)
             }}
-            items={[{ id: 'unconfigured', label: '清除独立模型配置' }, ...models]}
+            items={[...models, { id: 'unconfigured', label: '清除独立模型配置' }]}
             anchor={<Button variant="outline" size="sm" disabled={!writable} aria-haspopup="menu" aria-expanded={modelMenuOpen && writable} onClick={() => { setModelMenuOpen(true); refreshCatalog() }}>{current.provider || current.model ? `${current.provider} · ${current.model}` : '选择判定模型'}</Button>} />
         </div>
         {loadingCatalog && <p role="status">正在读取模型目录…</p>}
         {catalogError && <p className={styles.error} role="alert">模型目录加载失败：{catalogError}</p>}
         {catalog?.failures.map(failure => <p className={styles.error} key={failure.id}>模型目录部分加载失败：{failure.name}：{failure.message}</p>)}
         {catalog && models.length === 0 && <p className={styles.note}>目录暂无可选模型；已有配置不会被自动清除。</p>}
-        <div className={styles.testModel}><span>当前判定模型：{current.decisionApi?.enabled ? `OpenRouter · ${current.decisionApi.model}` : current.provider && current.model ? `${current.provider} · ${current.model}` : '未选择'}</span><span className={styles.modeBadge}>{modelMode === 'jev-native' ? 'Jev 原生' : modelMode === 'llm-json' ? 'LLM JSON 模拟' : '待配置'}</span></div>
-        <p className={styles.note}>{current.decisionApi?.enabled ? '使用 DSH 凭据库中的 OpenRouter 密钥。规则判断和候选筛选走原生接口；消息文本仍由上方普通模型生成。' : '普通模型使用 LLM JSON 判定；也可启用 OpenRouter Jev 原生判定。'}</p>
+        <div className={styles.testModel}><span>当前判定模型：{current.provider && current.model ? `${current.provider} · ${current.model}` : '未选择'}</span>{modelMode !== 'jev-native' && <span className={styles.modeBadge}>{modelMode === 'llm-json' ? '兼容模式' : '待配置'}</span>}</div>
+        <p className={styles.note}>支持概率判定的模型优先显示；普通模型标注“兼容模式”，使用 LLM JSON 判定。</p>
       </div>
 
       <div className={styles.panel}>

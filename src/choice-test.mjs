@@ -1,11 +1,11 @@
-import { modeForModel } from './mode.mjs';
+import { modeForModel, isNativeSelection } from './mode.mjs';
 
 /** Evaluate one Choice question without changing a session or injecting rule context. */
 export async function testChoice({ settings, state, question, options, signal, stream, createMessage }) {
-  const native = settings.decisionApi?.enabled;
+  const native = isNativeSelection(settings);
   if (!native && (!settings.provider || !settings.model)) throw new Error('请先选择判定模型。');
-  const mode = modeForModel(settings.model, settings.decisionApi);
-  if (mode === 'jev-native' && !native) throw new Error('请启用 OpenRouter Jev 原生判定并配置凭据。所选型号需要原生结构化调用。');
+  const mode = modeForModel(settings.model, settings.provider);
+  if (mode === 'jev-native' && !native) throw new Error('所选型号需要原生结构化调用；请在下拉中选择 OpenRouter 提供商的 Jev 模型。');
   if (typeof state !== 'string' || !state.trim() || state.length > 24000) throw new Error('测试内容应为 1 至 24000 字。');
   if (typeof question !== 'string' || !question.trim() || question.length > 2000) throw new Error('题目应为 1 至 2000 字。');
   if (!Array.isArray(options) || options.length < 2 || options.length > 16

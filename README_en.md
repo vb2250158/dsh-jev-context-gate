@@ -2,15 +2,15 @@
 
 English | [简体中文](README.md)
 
-Smart Rules for DSH (package `dsh-jev-context-gate`). Settings → 智能规则 configures event judgments, content selection, and actions; DSH 0.2 reads and writes configuration by the plugin entry ID `dsh-jev-context-gate`. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Enable “OpenRouter Jev 原生判定” to send rule decisions, candidate filtering and test-page questions to the native Decisions API. Ordinary models remain responsible for actions that generate text.
+Smart Rules for DSH (package `dsh-jev-context-gate`). Plugins → Smart rules configures event judgements, content selection, and actions; DSH 0.2 reads and writes configuration by the plugin entry ID `dsh-jev-context-gate`. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Select a native OpenRouter Jev model in the same dropdown to use the Decisions API. Ordinary models remain responsible for actions that generate text.
 
 ## Native OpenRouter Jev decisions
 
-Version 0.1.38 adds a native-decision switch. Save `OPENROUTER_API_KEY` in DSH credentials, then enable the switch. Secrets stay outside plugin configuration, request logs and browser settings snapshots. The default model is `typesafe/jev-1.13` at `https://openrouter.ai/api/alpha/decisions`. Ordinary models still compose outgoing messages.
+Use the existing decision-model dropdown in Plugins → Smart rules. Native probability models appear first without an extra label; ordinary models carry a compatibility-mode label. Select OpenRouter · Jev 1.13 to use the native Decisions API, or select an ordinary model for the existing LLM JSON judgement. There is no separate native switch.
 
-Rule options use native Choice probabilities. Candidate selection submits independent Noul questions in one request and retains existing thresholds, order and count. The test page shows the served model, probabilities, native confidence and duration. HTTP failures, refusals and invalid probabilities do not activate actions or silently fall back to another paid model.
+Configure `OPENROUTER_API_KEY` in the DSH credential store. The `provider` and `model` fields own the active decision selection; `decisionApi.apiKeyRef` and `decisionApi.timeoutMs` configure credentials and timeout. Settings from 0.1.38–0.1.39 migrate to the OpenRouter selection and retain the previous ordinary model in `messageModel` for text-generation actions. Choosing another ordinary model updates that text model. A text-generation action fails explicitly if native selection has no saved ordinary text model.
 
-The `decisionApi` fields are `enabled`, `model`, `apiKeyRef` and `timeoutMs` (30000 by default). Disable the switch to restore LLM JSON decisions. Native calls bypass `llm/stream` and are not yet included in Chat Enhancement’s individual LLM-call statistics; the test page reports native request duration directly.
+Rule options use native Choice probabilities; candidates use independent Noul probabilities in one request. Existing thresholds, ranking and counts remain. The test page shows the served model, probabilities, native confidence and duration. Failed or refused requests and invalid probabilities do not activate actions or silently fall back. Native requests are not yet included in individual LLM-call statistics.
 
 ## Context lifecycle policy
 

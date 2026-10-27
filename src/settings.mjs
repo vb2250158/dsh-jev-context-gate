@@ -1,5 +1,6 @@
 import z from '@deepseek-ai/schemastery';
 import { DEFAULT_CONTEXT_POLICY } from './context-defaults.mjs';
+import { isNativeSelection } from './mode.mjs';
 
 export const SETTINGS_NAMESPACE = 'jev-context-gate';
 const commonRuleFields = { toolName: '',
@@ -47,6 +48,7 @@ const ruleSchema = z.object({
   threshold: z.number().min(0).max(1).default(0.8), context: z.string().default(''),
 });
 const fields = {
+  messageModel: z.object({ provider: z.string().default(''), model: z.string().default('') }).default({ provider: '', model: '' }),
   decisionApi: z.object({
     enabled: z.boolean().default(DEFAULT_DECISION_API.enabled),
     model: z.string().default(DEFAULT_DECISION_API.model),
@@ -151,6 +153,13 @@ const normalize = value => {
       splitMode, splitText, selectionMode, selectionValue, selectionAction, selectionActionText,
       questionSource: rule.questionSource, questionScript: rule.questionScript, question, options: candidateSource === 'none' ? options : [], threshold: rule.threshold };
   });
+  // Releases 0.1.38–39 stored native selection beside the ordinary model.
+  // Decode that document once into the same provider/model pair used by the picker.
+  if (value.decisionApi.enabled) return { ...value, rules,
+    provider: 'openrouter', model: value.decisionApi.model,
+    messageModel: isNativeSelection(value) ? value.messageModel : { provider: value.provider, model: value.model },
+    decisionApi: { ...value.decisionApi, enabled: false },
+  };
   return { ...value, rules };
 };
 export const SettingsSchema = z.transform(z.object(fields), normalize, true);
