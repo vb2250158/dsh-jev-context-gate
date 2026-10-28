@@ -135,3 +135,5 @@ The icon uses a centered 36 × 36 viewBox to leave more space around the artwork
 With Performance statistics enabled, the optional `agentPreStepTiming` service measures this plugin's own input processing, candidate reads, question-generation scripts and skill snapshots. Downstream pre-step work is excluded. Records contain names and timings, never inputs or script contents.
 
 Native Jev probability requests bypass `llm/stream`. Performance statistics 0.1.3 or later uses the optional `chatStageTiming.request` API to record each native request’s model, purpose, rules and duration. Non-streaming replies do not produce a first-token timestamp.
+
+Candidate selection writes validated scores, ranks, chosen candidates and rule parameters to an ignorable catalog-selection session event, correlated with timings by selectionId. It excludes conversation, question text and skill bodies; diagnostic failure does not change the selection.

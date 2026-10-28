@@ -1,5 +1,9 @@
 # 更新记录
 
+## 0.1.42
+
+- Candidate selection writes validated scores, ranks, chosen candidates and rule parameters to an ignorable catalog-selection session event, correlated with timings by selectionId. It excludes conversation, question text and skill bodies; diagnostic failure does not change the selection.
+
 ## 0.1.41
 
 - 增加可选的输入预处理内部计时：规则、候选来源、问题生成和技能快照；保留判定和注入行为。

@@ -145,3 +145,5 @@ The icon uses a centered 36 × 36 viewBox to leave more space around the artwork
 安装性能统计插件后，输入规则处理通过可选 `agentPreStepTiming` 服务记录插件自有耗时，并分别标记候选读取、问题生成脚本和技能目录快照；下游预处理不计入本插件耗时。统计只保存名称和时间，不保存输入或脚本内容。
 
 原生 Jev 概率 API 不经过 `llm/stream`。性能统计 0.1.3 或以上通过可选 `chatStageTiming.request` 分别记录每次原生判定的模型、用途、规则和请求耗时；整包返回不产生首 token 计时。
+
+候选筛选将当次验证后的评分、排序、选中结果和规则参数写入可忽略的 catalog-selection 会话事件，通过 selectionId 关联统计调用。记录不含对话、问题文本或技能正文；记录失败不改变筛选结果。

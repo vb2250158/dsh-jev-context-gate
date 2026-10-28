@@ -12,6 +12,7 @@ import { testChoice } from './choice-test.mjs';
 import { createTestHandler } from './test-route.mjs';
 import { resolveSkillRequests } from './skill-injection.mjs';
 import { catalogInput, rankCatalog, pruneCatalogMessage } from './catalog-prune.mjs';
+import { recordCatalogSelection } from './catalog-selection-record.mjs';
 import { resolveCandidates } from './candidate-source.mjs';
 import { applyEventSelection, selectEventCandidates } from './event-selection.mjs';
 import { toolRuleInput, matchesTool, composeGroupMessage } from './tool-automation.mjs';
@@ -185,6 +186,8 @@ export function apply(ctx, config = {}) {
   });
   ctx.on('agent/pre-step', async ({ agent, turn, step, signal }, next) => {
     let decision = await next();
+    const onSelection = selection => recordCatalogSelection(agent.session, { turn, step }, selection,
+      () => ctx.logger.warn('Jev candidate selection details could not be recorded'));
     const timed = (operation, task) => ctx.get('agentPreStepTiming')?.run({ agent, turn, step },
       { plugin: 'dsh-jev-context-gate', operation }, task) ?? task();
     return timed('input-rules', async () => {
@@ -204,7 +207,7 @@ export function apply(ctx, config = {}) {
           if (!Array.isArray(candidates)) throw new Error(`Jev event parameter ${rule.candidateParameterKey} is unavailable`);
           const prepared = await timed('question-provider', () => generateQuestion(rule, input, signal, candidates));
           const entries = await rankCatalog({ settings, rule: prepared, entries: candidates, input, signal,
-            stream: timedStream, createMessage: contextMessage });
+            stream: timedStream, createMessage: contextMessage, onSelection });
           const messages = [...decision.messages];
           if (rule.selectionAction === 'prune') messages[catalogIndex] = pruneCatalogMessage(catalog, entries, escapeText);
           else if (entries.length) {
@@ -226,7 +229,7 @@ export function apply(ctx, config = {}) {
           const candidates = await timed('candidate-source', () => resolveCandidates(rule, input, signal));
           const prepared = await timed('question-provider', () => generateQuestion(rule, input, signal, candidates));
           const selected = await rankCatalog({ settings, rule: prepared, entries: candidates, input, signal,
-            stream: timedStream, createMessage: contextMessage });
+            stream: timedStream, createMessage: contextMessage, onSelection });
           if (!selected.length) continue;
           const text = selectedText(rule, selected);
           if (text.length > settings.maxContextCharacters) throw new Error('Selected candidate content exceeds context budget');
