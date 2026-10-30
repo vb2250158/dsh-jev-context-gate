@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { modeForModel } from '../src/mode.mjs';
-import { modelChoices } from '../src/model-selection.mjs';
+import { decisionModelGroups } from '../src/model-selection.mjs';
 import { decideQuestions } from '../src/decision-adapter.mjs';
 import { defaultRules, SettingsSchema } from '../src/settings.mjs';
 import { validateRules } from '../src/policy.mjs';
@@ -13,9 +13,10 @@ test('specialized protocols are explained instead of sent as chat requests', asy
   for (const { model } of exceptions) {
     const settings = { provider: 'openrouter', model };
     assert.equal(modeForModel(model, settings.provider), 'unsupported');
-    const row = modelChoices({ groups: [{ id: settings.provider, name: 'OpenRouter', models: [{ id: model, name: model }] }] }).find(row => row.model === model);
-    assert.match(row.label, /不支持通用题型/);
-    assert.doesNotMatch(row.label, /兼容模式/);
+    const group = decisionModelGroups({ groups: [{ id: settings.provider, name: 'OpenRouter', models: [{ id: model, name: model }] }] }).find(group => group.id === settings.provider);
+    const row = group.models.find(row => row.id === model);
+    assert.match(row.name, /不支持通用题型/);
+    assert.doesNotMatch(row.name, /兼容模式/);
     await assert.rejects(async () => decideQuestions({ settings, state: 'fixture', questions: {}, stream }), /不支持通用三题型/);
   }
   assert.equal(calls, 0);

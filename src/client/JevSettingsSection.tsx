@@ -1,10 +1,11 @@
 import * as React from 'react'
-import { Button, Menu, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { CatalogPickerProps } from 'dsh-codex-model-selector/model-picker'
 import type { ModelCatalog } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import styles from './JevSettingsSection.module.css'
 import { modeForModel, unsupportedModelReason } from '../mode.mjs'
-import { modelChoices, selectionPatch } from '../model-selection.mjs'
+import { decisionModelGroups, selectionPatch } from '../model-selection.mjs'
 import { validateRules } from '../policy.mjs'
 import { groupRulePresets } from '../settings.mjs'
 import { JevTestPage } from './JevTestPage.tsx'
@@ -12,7 +13,11 @@ import { JevRuleEditor } from './JevRuleEditor.tsx'
 import type { DraftRule, Rule } from './JevRuleEditor.tsx'
 
 export type Settings = { enabled: boolean; provider: string; model: string; decisionApi: { enabled: boolean; model: string; apiKeyRef: string; timeoutMs: number }; messageModel: { provider: string; model: string }; nativeJev: boolean; beforeEnabled: boolean; afterEnabled: boolean; maxContextCharacters: number; maxCorrections: number; presetVersion: number; rules: Rule[] }
-type Injected = { scope: ConfigForm<Settings>; loadCatalog: () => Promise<ModelCatalog> }
+export type ModelPickerSource = {
+  subscribe: (listener: () => void) => () => void
+  getSnapshot: () => React.ComponentType<CatalogPickerProps> | undefined
+}
+type Injected = { scope: ConfigForm<Settings>; loadCatalog: () => Promise<ModelCatalog>; modelPicker: ModelPickerSource }
 export type JevSettingsSectionProps = Partial<Injected> & { close?: () => void }
 
 const toDraft = (rules: Rule[]): DraftRule[] =>
@@ -57,14 +62,14 @@ function validateDraft(rules: DraftRule[]): Rule[] {
 }
 
 export function JevSettingsSection(props: JevSettingsSectionProps): React.ReactNode {
-  if (!props.scope || !props.loadCatalog) return <p role="alert">智能规则设置服务未注入。</p>
-  return <Loaded scope={props.scope} loadCatalog={props.loadCatalog} />
+  if (!props.scope || !props.loadCatalog || !props.modelPicker) return <p role="alert">智能规则设置服务未注入。</p>
+  return <Loaded scope={props.scope} loadCatalog={props.loadCatalog} modelPicker={props.modelPicker} />
 }
 
-function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
+function Loaded({ scope, loadCatalog, modelPicker }: Injected): React.ReactNode {
   const snapshot = React.useSyncExternalStore(listener => scope.subscribe(listener), () => scope.getSnapshot())
   const current = snapshot.value
-  const [modelMenuOpen, setModelMenuOpen] = React.useState(false)
+  const ModelPicker = React.useSyncExternalStore(modelPicker.subscribe, modelPicker.getSnapshot)
   const [catalog, setCatalog] = React.useState<ModelCatalog>()
   const [catalogError, setCatalogError] = React.useState<string>()
   const [loadingCatalog, setLoadingCatalog] = React.useState(false)
@@ -155,16 +160,20 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
       if (generation === request.current) setLoadingCatalog(false)
     })
   }
-  const models = modelChoices(catalog)
-  const patch = (value: Partial<Settings>): void => {
-    if (!writable || savingRef.current) return
+  const groups = React.useMemo(() => decisionModelGroups(catalog), [catalog])
+  const patch = async (value: Partial<Settings>): Promise<boolean> => {
+    if (!writable || savingRef.current) return false
     savingRef.current = true
     setSaving(true)
     setSaveError(undefined)
-    // Provider and model are one revision-fenced mutation, never two writes.
-    void scope.mutate(Object.entries(value).map(([field, next]) => ({ op: 'set' as const, path: [field], value: next })))
-      .catch((error: unknown) => setSaveError(error instanceof Error ? error.message : String(error)))
-      .finally(() => { savingRef.current = false; setSaving(false) })
+    try {
+      // Provider and model are one revision-fenced mutation, never two writes.
+      await scope.mutate(Object.entries(value).map(([field, next]) => ({ op: 'set' as const, path: [field], value: next })))
+      return true
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error))
+      return false
+    } finally { savingRef.current = false; setSaving(false) }
   }
   if (page === 'test') return <JevTestPage model={current} onBack={() => setPage('rules')} />
   return <section className={styles.section}>
@@ -178,27 +187,15 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
         <div className={styles.sectionHeading}><h3>运行设置</h3></div>
         <div className={styles.row}><span>启用智能规则</span><Switch checked={current.enabled} disabled={!writable} label="启用智能规则" onChange={enabled => patch({ enabled })} /></div>
         <div className={styles.modelField}><span>判定模型</span>
-          <Menu autoFocus portal open={modelMenuOpen && writable} onClose={() => setModelMenuOpen(false)}
-            selectedId={current.provider || current.model ? JSON.stringify([current.provider, current.model]) : 'unconfigured'}
-            onSelect={id => {
-              if (id === 'unconfigured') patch(selectionPatch(current, { provider: '', model: '' }))
-              else {
-                const selected = models.find(model => model.id === id)
-                if (!selected) return
-                patch(selectionPatch(current, selected))
-              }
-              setModelMenuOpen(false)
-            }}
-            items={[...models, { id: 'unconfigured', label: '清除独立模型配置' }]}
-            anchor={<Button variant="outline" size="sm" disabled={!writable} aria-haspopup="menu" aria-expanded={modelMenuOpen && writable} onClick={() => { setModelMenuOpen(true); refreshCatalog() }}>{current.provider || current.model ? `${current.provider} · ${current.model}` : '选择判定模型'}</Button>} />
+          {ModelPicker ? <ModelPicker groups={groups} current={current.provider && current.model ? { provider: current.provider, model: current.model } : null}
+            locked={!writable} select={selected => patch(selectionPatch(current, selected))} load={refreshCatalog}
+            status={loadingCatalog ? 'loading' : catalogError ? 'error' : 'ready'} error={catalogError ?? null} failures={catalog?.failures ?? []} />
+            : <p role="alert">模型选择器不可用。请安装或启用“模型与推理选择”插件 0.1.18 或更高版本后重试。</p>}
+          <Button variant="ghost" size="sm" disabled={!writable || !(current.provider || current.model)} onClick={() => { void patch(selectionPatch(current, { provider: '', model: '' })) }}>清除独立模型配置</Button>
         </div>
-        {loadingCatalog && <p role="status">正在读取模型目录…</p>}
-        {catalogError && <p className={styles.error} role="alert">模型目录加载失败：{catalogError}</p>}
-        {catalog?.failures.map(failure => <p className={styles.error} key={failure.id}>模型目录部分加载失败：{failure.name}：{failure.message}</p>)}
-        {catalog && models.length === 0 && <p className={styles.note}>目录暂无可选模型；已有配置不会被自动清除。</p>}
         <div className={styles.testModel}><span>当前判定模型：{current.provider && current.model ? `${current.provider} · ${current.model}` : '未选择'}</span>{(modelMode === 'llm-json' || modelMode === 'unconfigured' || modelMode === 'unsupported') && <span className={styles.modeBadge}>{modelMode === 'llm-json' ? '兼容模式' : modelMode === 'unsupported' ? '不支持通用题型' : '待配置'}</span>}</div>
         {unsupported && <p className={styles.error} role="alert">{unsupported}</p>}
-        <p className={styles.note}>支持概率判定的模型优先显示；普通模型标注“兼容模式”，使用 LLM JSON 判定。</p>
+        <p className={styles.note}>各提供商下支持概率判定的模型优先显示；普通模型标注“兼容模式”，使用 LLM JSON 判定。</p>
       </div>
 
       <div className={styles.panel}>

@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.1.44
+
+- 判定模型使用聊天会话同一套模型选择器，复用常用模型、搜索和提供商分组；选择结果只保存到智能规则。
+- 设置界面依赖模型与推理选择插件 0.1.18 或以上。原生决策模型与普通兼容模型保留在同一目录，三种题型和既有规则不变。
+- Use the chat model selector for independent decision settings, including shared recent models, search, and provider groups. Requires Model & reasoning selector 0.1.18 or later; selecting a decision model preserves the chat selection.
+
 ## 0.1.43
 
 - 统一选择题、判断题、评分题；规则编辑器顶部和测试页可选，原生与 JSON 兼容模式共享配置与结果处理。

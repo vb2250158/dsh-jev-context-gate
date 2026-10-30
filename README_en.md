@@ -22,7 +22,9 @@ Native request diagnostics include credential resolution, response-header wait, 
 
 ## Native decision configuration
 
-Use the existing decision-model dropdown in Plugins → Smart rules. Native probability models appear first without an extra label; ordinary models carry a compatibility-mode label. Select OpenRouter · Jev 1.13 to use the native Decisions API, or select an ordinary model for the existing LLM JSON judgement. There is no separate native switch.
+Plugins → Smart rules uses the same model chooser as chat, including recent models, search, and provider groups. Ordinary models carry a compatibility-mode label; native decision models use the Decisions API. Selection saves the independent decision model and preserves the chat model.
+
+The settings interface requires Model & reasoning selector (`dsh-codex-model-selector`) 0.1.18 or later. Upgrade that plugin before Smart rules, then refresh the page. Existing rules require no manual migration.
 
 Configure `OPENROUTER_API_KEY` in the DSH credential store. The `provider` and `model` fields own the active decision selection; `decisionApi.apiKeyRef` and `decisionApi.timeoutMs` configure credentials and timeout. Settings from 0.1.38–0.1.39 migrate to the OpenRouter selection and retain the previous ordinary model in `messageModel` for text-generation actions. Choosing another ordinary model updates that text model. A text-generation action fails explicitly if native selection has no saved ordinary text model.
 

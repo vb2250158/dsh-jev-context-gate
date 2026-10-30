@@ -1,23 +1,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { modelChoices, selectionPatch } from '../src/model-selection.mjs';
+import { selectionPatch, decisionModelGroups } from '../src/model-selection.mjs';
 import { SettingsSchema } from '../src/settings.mjs';
 import { modeForModel } from '../src/mode.mjs';
 import { testChoice } from '../src/choice-test.mjs';
 import { composeGroupMessage } from '../src/tool-automation.mjs';
 import nativeModels from '../src/native-models.json' with { type: 'json' };
 
-test('one catalog puts native probabilities first, labels them and keeps ordinary providers and model identities', () => {
-  const choices = modelChoices({ groups: [
+test('one catalog prioritizes native models within providers and preserves identities', () => {
+  const groups = decisionModelGroups({ groups: [
     { id: 'workbuddy', name: 'WorkBuddy', models: [{ id: 'deepseek', name: 'DeepSeek' }] },
     { id: 'openrouter', name: 'OpenRouter', models: [{ id: 'typesafe/jev-1.13', name: 'Jev 1.13' }, { id: 'ordinary', name: 'Ordinary' }] },
   ] });
+  const choices = groups.flatMap(group => group.models.map(model => ({ provider: group.id, model: model.id, native: modeForModel(model.id, group.id) === 'jev-native', label: `${group.name} · ${model.name}`, id: JSON.stringify([group.id, model.id]) })));
   assert.deepEqual(choices.filter(row => ['typesafe/jev-1.13', 'deepseek', 'ordinary'].includes(row.model)).map(({ provider, model, native, label }) => ({ provider, model, native, label })), [
-    { provider: 'openrouter', model: 'typesafe/jev-1.13', native: true, label: 'OpenRouter · Jev 1.13' },
     { provider: 'workbuddy', model: 'deepseek', native: false, label: 'WorkBuddy · DeepSeek · 兼容模式' },
+    { provider: 'openrouter', model: 'typesafe/jev-1.13', native: true, label: 'OpenRouter · Jev 1.13' },
     { provider: 'openrouter', model: 'ordinary', native: false, label: 'OpenRouter · Ordinary · 兼容模式' },
   ]);
-  assert.equal(modelChoices(undefined)[0].provider, 'openrouter');
+  assert.equal(decisionModelGroups(undefined)[0].id, 'openrouter');
   assert.equal(modeForModel('typesafe/jev-1.13', 'unrelated'), 'llm-json');
   assert.equal(choices.filter(row => row.native).length, nativeModels.length);
   assert.equal(new Set(choices.map(row => row.id)).size, choices.length);
@@ -54,4 +55,25 @@ test('switching from native to ordinary calls the ordinary provider and switchin
     ctx: { llm: { stream: value => { generated = value; return (async function* () { yield { type: 'text-delta', text: 'fixture' }; yield { type: 'finish', reason: { kind: 'stop' } }; })(); } } },
   });
   assert.equal(generated.provider, 'example'); assert.equal(generated.model, 'ordinary');
+});
+
+
+test('shared picker catalog preserves provider identities and metadata without changing host data', () => {
+  const catalog = { groups: [{ id: 'openrouter', name: 'Router', kind: 'remote', models: [
+    { id: 'ordinary', name: 'Ordinary', type: 'chat', reasoning: { defaultEffort: 'high' } },
+    { id: 'openai/gpt-6-luna-decisions', name: 'GPT Decisions', type: 'decision' },
+  ] }, { id: 'custom', name: 'Custom', models: [{ id: 'ordinary', name: 'Other Ordinary' }] }] };
+  const before = structuredClone(catalog);
+  const groups = decisionModelGroups(catalog);
+  assert.deepEqual(catalog, before);
+  assert.equal(groups[0].kind, 'remote');
+  assert.equal(groups[0].models[0].id, 'openai/gpt-6-luna-decisions');
+  assert.equal(groups[0].models.filter(model => model.id === 'openai/gpt-6-luna-decisions').length, 1);
+  const ordinary = groups[0].models.find(model => model.id === 'ordinary');
+  assert.equal(ordinary.name, 'Ordinary · 兼容模式');
+  assert.equal(ordinary.type, 'chat');
+  assert.deepEqual(ordinary.reasoning, { defaultEffort: 'high' });
+  assert.notEqual(ordinary, catalog.groups[0].models[0]);
+  assert.equal(groups[1].id, 'custom');
+  assert.equal(groups[1].models[0].id, 'ordinary');
 });

@@ -1,17 +1,17 @@
 import nativeModels from './native-models.json' with { type: 'json' };
 import { isNativeSelection, unsupportedModelReason } from './mode.mjs';
 
-/** Merge supported native models into the ordinary picker, preserving catalog order within each kind. */
-export function modelChoices(catalog) {
-  const rows = catalog?.groups.flatMap(group => group.models.map(model => ({
-    provider: group.id, model: model.id, label: `${group.name} · ${model.name}`,
-  }))) ?? [];
-  for (const entry of nativeModels) if (!rows.some(row => row.provider === entry.provider && row.model === entry.model)) {
-    rows.push({ provider: entry.provider, model: entry.model, label: `${entry.providerName} · ${entry.name}` });
+/** Copy host metadata and append native decision routes without mutating the shared catalog. */
+export function decisionModelGroups(catalog) {
+  const groups = (catalog?.groups ?? []).map(group => ({ ...group, models: group.models.map(model => ({ ...model })) }));
+  for (const entry of nativeModels) {
+    let group = groups.find(item => item.id === entry.provider);
+    if (!group) groups.push(group = { id: entry.provider, name: entry.providerName, models: [] });
+    if (!group.models.some(model => model.id === entry.model)) group.models.push({ id: entry.model, name: entry.name });
   }
-  return rows.map(row => ({ ...row, id: JSON.stringify([row.provider, row.model]), native: isNativeSelection(row),
-    label: `${row.label}${unsupportedModelReason(row.model, row.provider) ? ' · 不支持通用题型' : isNativeSelection(row) ? '' : ' · 兼容模式'}`,
-  })).sort((left, right) => Number(right.native) - Number(left.native));
+  return groups.map(group => ({ ...group, models: group.models.map(model => ({ ...model,
+    name: `${model.name}${unsupportedModelReason(model.id, group.id) ? ' · 不支持通用题型' : isNativeSelection({ provider: group.id, model: model.id }) ? '' : ' · 兼容模式'}`,
+  })).sort((left, right) => Number(isNativeSelection({ provider: group.id, model: right.id })) - Number(isNativeSelection({ provider: group.id, model: left.id }))) }));
 }
 
 /** One model selection also retires the old switch and retains the last ordinary text model. */
