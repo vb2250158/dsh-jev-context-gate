@@ -28,6 +28,10 @@ export function validateRules(rules) {
     const input = rule.input || (rule.phase === 'after' ? 'tool-results' : rule.phase === 'skill-injection' ? 'skill-summary' : 'latest-user-message');
     const candidateSource = rule.phase === 'skill-catalog' ? 'event-params'
       : rule.candidateSource === 'input-lines' ? 'input-split' : rule.candidateSource ?? 'none';
+    const questionType = rule.questionType || (candidateSource === 'none' ? 'choice' : 'noul');
+    const scoreLevels = rule.scoreLevels ?? ['不相关', '部分相关', '高度相关'];
+    if (!['choice', 'noul', 'score'].includes(questionType) || !Array.isArray(scoreLevels) || scoreLevels.length > 16 || scoreLevels.some(level => typeof level !== 'string' || level.length > 800)
+      || candidateSource !== 'none' && questionType === 'score' && (scoreLevels.length < 2 || scoreLevels.some(level => !level.trim()) || new Set(scoreLevels).size !== scoreLevels.length)) throw new TypeError('Invalid question type or score levels');
     const candidateText = rule.candidateText ?? '';
     const candidateScript = rule.candidateScript ?? '';
     const candidateParameterKey = rule.candidateParameterKey || (rule.phase === 'skill-catalog' ? 'skills' : '');
@@ -74,13 +78,13 @@ export function validateRules(rules) {
         || rule.options[1]?.action?.type !== 'none')) throw new TypeError('Invalid legacy selection options');
       return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, eventKey, eventDisplay, inputParameterKey, inputParameterDisplay, toolName, input, customInput,
         candidateSource, candidateText, candidateScript, candidateParameterKey, candidateParameterDisplay, splitMode, splitText, selectionMode, selectionValue, selectionAction, selectionActionText,
-        questionSource, questionScript, question, options: [], threshold: rule.threshold };
+        questionType, scoreLevels, questionSource, questionScript, question, options: [], threshold: rule.threshold };
     }
     const options = Array.isArray(rule.options) && rule.options.length ? rule.options :
       rule.phase === 'before'
         ? [{ id: 'yes', label: '是', action: { type: 'inject-context', text: rule.context } }, { id: 'no', label: '否', action: { type: 'none', text: '' } }]
         : [{ id: 'failed', label: '有失败', action: { type: 'append-reminder', text: rule.context } }, { id: 'success', label: '全部成功', action: { type: 'none', text: '' } }];
-    if (options.length < 2 || options.length > 16) throw new TypeError('Invalid options');
+    if (options.length < 2 || options.length > 16 || questionType === 'noul' && options.length !== 2) throw new TypeError('Invalid options');
     const optionIds = new Set(), labels = new Set();
     const validOptions = options.map(option => {
       if (!option || typeof option.id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(option.id) || optionIds.has(option.id)
@@ -100,7 +104,7 @@ export function validateRules(rules) {
     if (input === 'user-message-with-skills' && !validOptions.some(option => option.action.type === 'inject-skill')) throw new TypeError('Skill-aware input requires a skill action');
     return { id: rule.id, enabled: rule.enabled, title, description, phase: rule.phase, eventKey, eventDisplay, inputParameterKey, inputParameterDisplay, toolName, input, customInput, candidateSource, candidateText, candidateScript, candidateParameterKey, candidateParameterDisplay,
       splitMode, splitText, selectionMode, selectionValue, selectionAction, selectionActionText,
-      questionSource, questionScript, question, options: validOptions, threshold: rule.threshold };
+      questionType, scoreLevels, questionSource, questionScript, question, options: validOptions, threshold: rule.threshold };
   });
 }
 
@@ -120,7 +124,9 @@ export function evaluatePolicy({ rules, phase, verdicts, maxCharacters = 12000 }
     }
     const total = rule.options.reduce((sum, option) => sum + scores[option.id], 0);
     if (Math.abs(total - 1) > 0.02) { decisions.push({ ruleId: rule.id, status: 'invalid-result' }); continue; }
-    const selected = rule.options.reduce((best, option) => scores[option.id] > scores[best.id] ? option : best);
+    const expected = verdicts[rule.id].expectedScore;
+    if (rule.questionType === 'score' && (!Number.isFinite(expected) || expected < 0 || expected > rule.options.length - 1)) { decisions.push({ ruleId: rule.id, status: 'invalid-result' }); continue; }
+    const selected = rule.questionType === 'score' ? rule.options[Math.round(expected)] : rule.options.reduce((best, option) => scores[option.id] > scores[best.id] ? option : best);
     const score = scores[selected.id] / total;
     if (score < rule.threshold) { decisions.push({ ruleId: rule.id, optionId: selected.id, status: 'below-threshold', score }); continue; }
     if (selected.action.type === 'none') { decisions.push({ ruleId: rule.id, optionId: selected.id, status: 'no-action', score }); continue; }

@@ -1,5 +1,13 @@
 # 更新记录
 
+## 0.1.43
+
+- 统一选择题、判断题、评分题；规则编辑器顶部和测试页可选，原生与 JSON 兼容模式共享配置与结果处理。
+- 新增 DecisionAdapter 父类、通用 OpenRouter 原生模型目录和 ScaleDown 输入适配；普通聊天模型继续使用三题型 JSON 估计。
+- 保留旧普通规则的 Choice 和候选规则的 Noul 行为；评分按期望等级处理，缺失必需概率明确失败。
+- 原生请求提供凭据读取、响应头等待、响应体读取、校验分段计时；按模型协议限制分批并响应取消。
+- Add bilingual model capability documentation, a catalog audit script, and keyless CI tests/build. Native provider coverage is protocol-tested; the model inventory is documentation-verified, not a live inference benchmark.
+
 ## 0.1.42
 
 - Candidate selection writes validated scores, ranks, chosen candidates and rule parameters to an ignorable catalog-selection session event, correlated with timings by selectionId. It excludes conversation, question text and skill bodies; diagnostic failure does not change the selection.

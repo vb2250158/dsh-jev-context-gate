@@ -1,0 +1,50 @@
+[
+  {
+    "model": "cloudflare/clairic",
+    "protocol": "extractions",
+    "questionTypes": [],
+    "stateFormat": "extraction-fields",
+    "source": "https://openrouter.ai/cloudflare/clairic",
+    "reason": "Extraction fields use /api/alpha/extractions, not the three Decisions question types."
+  },
+  {
+    "model": "togethercomputer/tev1-4b-experimental",
+    "protocol": "chat-choice",
+    "questionTypes": [
+      "choice"
+    ],
+    "stateFormat": "decision-json",
+    "source": "https://openrouter.ai/togethercomputer/tev1-4b-experimental",
+    "reason": "Chat completions returns one option letter from 2-24 choices, not a calibrated probability distribution."
+  },
+  {
+    "model": "respan/span-01",
+    "protocol": "respan-span",
+    "questionTypes": [
+      "noul"
+    ],
+    "stateFormat": "span-behaviors",
+    "source": "https://www.respan.ai/docs/apis/gateway/run-span-01",
+    "reason": "Native trace scoring returns present, absent, and not-observable probabilities; generic state adaptation requires a dedicated adapter."
+  },
+  {
+    "model": "respan/span-01-lite",
+    "protocol": "respan-span",
+    "questionTypes": [
+      "noul"
+    ],
+    "stateFormat": "span-behaviors",
+    "source": "https://www.respan.ai/docs/apis/gateway/run-span-01",
+    "reason": "Same trace scoring protocol as Span-01."
+  },
+  {
+    "model": "respan/span-01-lite:free",
+    "protocol": "respan-span",
+    "questionTypes": [
+      "noul"
+    ],
+    "stateFormat": "span-behaviors",
+    "source": "https://www.respan.ai/docs/apis/gateway/run-span-01",
+    "reason": "Free routing variant of the same trace scoring protocol."
+  }
+]

@@ -1,5 +1,5 @@
 import nativeModels from './native-models.json' with { type: 'json' };
-import { isNativeSelection } from './mode.mjs';
+import { isNativeSelection, unsupportedModelReason } from './mode.mjs';
 
 /** Merge supported native models into the ordinary picker, preserving catalog order within each kind. */
 export function modelChoices(catalog) {
@@ -10,7 +10,7 @@ export function modelChoices(catalog) {
     rows.push({ provider: entry.provider, model: entry.model, label: `${entry.providerName} · ${entry.name}` });
   }
   return rows.map(row => ({ ...row, id: JSON.stringify([row.provider, row.model]), native: isNativeSelection(row),
-    label: `${row.label}${isNativeSelection(row) ? '' : ' · 兼容模式'}`,
+    label: `${row.label}${unsupportedModelReason(row.model, row.provider) ? ' · 不支持通用题型' : isNativeSelection(row) ? '' : ' · 兼容模式'}`,
   })).sort((left, right) => Number(right.native) - Number(left.native));
 }
 

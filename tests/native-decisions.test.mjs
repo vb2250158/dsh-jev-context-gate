@@ -53,7 +53,7 @@ test('HTTP failures, refusals and malformed probabilities cannot trigger decisio
     await assert.rejects(createDecisionClient(context(), async () => Response.json(result))(options));
   }
   await assert.rejects(createDecisionClient(context(), async () => new Response('private-input fixture-key', { status: 402 }))(options), error => {
-    assert.equal(error.message, 'OpenRouter Jev HTTP 402');
+    assert.equal(error.message, 'OpenRouter Decisions HTTP 402');
     return true;
   });
   await assert.rejects(createDecisionClient(context(async () => undefined), async () => { throw new Error('must not fetch'); })(options), /Missing OpenRouter credential/);
@@ -104,4 +104,12 @@ test('native configuration validates the credential reference and model while re
   assert.equal(SettingsSchema({}).decisionApi.enabled, false);
   assert.throws(() => SettingsSchema({ decisionApi: { apiKeyRef: 'not a reference' } }));
   assert.throws(() => SettingsSchema({ decisionApi: { model: 'ordinary-chat-model' } }));
+});
+
+
+test('native requests expose local timing phases without storing credentials or state', async () => {
+  const phases = [];
+  const ctx = { ...context(), get: () => ({ request: (_operation, task) => task(), run: async (operation, task) => { phases.push(operation.operation); return task(); } }) };
+  await createDecisionClient(ctx, async () => Response.json(wire({ check: answer })))({ settings, state: 'private-input', questions: { check: choice } });
+  assert.deepEqual(phases, ['decision-credentials', 'decision-response-headers', 'decision-response-body', 'decision-validation']);
 });

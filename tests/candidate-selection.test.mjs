@@ -1,3 +1,4 @@
+const noulAnswers = scores => ({ answers: Object.fromEntries(Object.values(scores).map((noul, i) => [`candidate-${i}`, { type: 'noul', noul }])) });
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveCandidates } from '../src/candidate-source.mjs';
@@ -28,13 +29,13 @@ test('100 configured notices are ranked in one model request and the saved limit
       entries, input: '当前内容', signal, createMessage,
       stream: async function* (options) {
         prompts.push(JSON.parse(options.messages[0].content[0].text));
-        yield { type: 'text-delta', text: JSON.stringify({ scores: Object.fromEntries(entries.map((entry, index) => [entry.name, index / 100])) }) };
+        yield { type: 'text-delta', text: JSON.stringify(noulAnswers(Object.fromEntries(entries.map((entry, index) => [entry.name, index / 100])))) };
         yield { type: 'finish', reason: { kind: 'stop' } };
       },
     });
     assert.equal(prompts.length, 1);
-    assert.equal(prompts[0].options.length, 100);
-    assert.equal(prompts[0].options[0].content, '注意事项 1');
+    assert.equal(Object.keys(prompts[0].questions).length, 100);
+    assert.equal(Object.values(prompts[0].state.candidates)[0], '注意事项 1');
     assert.equal(selected.length, limit);
     assert.equal(selected[0].description, '注意事项 100');
   }
@@ -47,16 +48,17 @@ test('trusted candidate script can generate items and invalid lists fail before 
   assert.throws(() => validateRules([{ ...manualRule, options: [{ ...manualRule.options[0], action: { type: 'none', text: '' } }, manualRule.options[1]] }]));
 });
 
-test('more than 100 candidates are all scored in one request and threshold still applies', async () => {
+test('more than 200 candidates remain in one ordinary-model request and threshold still applies', async () => {
   const entries = Array.from({ length: 220 }, (_, index) => ({ name: `item-${index + 1}`, description: `注意事项 ${index + 1}` }));
   const sizes = [];
   const selected = await rankCatalog({ settings: { provider: 'test', model: 'ordinary' },
     rule: { ...manualRule, threshold: 0.8, selectionValue: '5' },
     entries, input: '当前内容', signal, createMessage,
     stream: async function* (options) {
-      const candidates = JSON.parse(options.messages[0].content[0].text).options;
+      const prompt = JSON.parse(options.messages[0].content[0].text);
+      const candidates = Object.keys(prompt.questions).map(id => ({ id: `item-${Number(id.slice(10)) + 1}`, questionId: id }));
       sizes.push(candidates.length);
-      yield { type: 'text-delta', text: JSON.stringify({ scores: Object.fromEntries(candidates.map(row => [row.id, Number(row.id.slice(5)) / 220])) }) };
+      yield { type: 'text-delta', text: JSON.stringify({ answers: Object.fromEntries(candidates.map(row => [row.questionId, { type: 'noul', noul: Number(row.id.slice(5)) / 220 }])) }) };
       yield { type: 'finish', reason: { kind: 'stop' } };
     },
   });
@@ -65,8 +67,9 @@ test('more than 100 candidates are all scored in one request and threshold still
   const short = await rankCatalog({ settings: { provider: 'test', model: 'ordinary' },
     rule: { ...manualRule, threshold: 0.8 }, entries: entries.slice(0, 3), input: '当前内容', signal, createMessage,
     stream: async function* (options) {
-      const candidates = JSON.parse(options.messages[0].content[0].text).options;
-      yield { type: 'text-delta', text: JSON.stringify({ scores: Object.fromEntries(candidates.map(row => [row.id, 0.2])) }) };
+      const prompt = JSON.parse(options.messages[0].content[0].text);
+      const candidates = Object.keys(prompt.questions).map(id => ({ id: `item-${Number(id.slice(10)) + 1}`, questionId: id }));
+      yield { type: 'text-delta', text: JSON.stringify(noulAnswers(Object.fromEntries(candidates.map(row => [row.id, 0.2])))) };
       yield { type: 'finish', reason: { kind: 'stop' } };
     },
   });
@@ -84,13 +87,12 @@ test('selected input can supply one option per line without a candidate count ca
     stream: async function* (options) {
       const prompt = JSON.parse(options.messages[0].content[0].text);
       prompts.push(prompt);
-      yield { type: 'text-delta', text: JSON.stringify({ scores: Object.fromEntries(prompt.options.map((item, index) => [item.id, index / 550])) }) };
+      yield { type: 'text-delta', text: JSON.stringify({ answers: Object.fromEntries(Object.keys(prompt.questions).map(id => [id, { type: 'noul', noul: Number(id.slice(10)) / 550 }])) }) };
       yield { type: 'finish', reason: { kind: 'stop' } };
     },
   });
   assert.equal(prompts.length, 1);
-  assert.equal(prompts[0].options.length, 550);
-  assert.equal(prompts[0].event, 'before');
+  assert.deepEqual(prompts.map(prompt => Object.keys(prompt.questions).length), [550]);
   assert.equal(selected.length, 10);
   assert.equal(selected[0].description, '注意事项 550');
 });
@@ -105,7 +107,7 @@ test('score thresholds and bottom count select the configured subset', async () 
   const entries = ['甲', '乙', '丙', '丁'].map((description, index) => ({ name: `item-${index + 1}`, description }));
   const scores = { 'item-1': 0.1, 'item-2': 0.4, 'item-3': 0.7, 'item-4': 0.9 };
   const stream = async function* () {
-    yield { type: 'text-delta', text: JSON.stringify({ scores }) };
+    yield { type: 'text-delta', text: JSON.stringify(noulAnswers(scores)) };
     yield { type: 'finish', reason: { kind: 'stop' } };
   };
   for (const [selectionMode, selectionValue, expected] of [

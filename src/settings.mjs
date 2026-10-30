@@ -37,6 +37,8 @@ const actionParameterSchema = z.object({ key: z.string().required(), display: z.
 const actionSchema = z.object({ type: z.union([z.const('none'), z.const('inject-context'), z.const('inject-skill'), z.const('append-reminder'), z.const('skip-skill'), z.const('keep-top-skills'), z.const('inject-selected-candidates'), z.const('deny-tool'), z.const('notify-group'), z.const('ask-group'), z.const('dispatch')]).required(), text: z.string().default(''), params: z.array(actionParameterSchema).default([]) });
 const optionSchema = z.object({ id: z.string().required(), label: z.string().required(), action: actionSchema.required() });
 const ruleSchema = z.object({
+  questionType: z.union([z.const(''), z.const('choice'), z.const('noul'), z.const('score')]).default(''),
+  scoreLevels: z.array(z.string()).default(['不相关', '部分相关', '高度相关']),
   id: z.string().required(), enabled: z.boolean().default(true), title: z.string().default(''), description: z.string().default(''), phase: z.union([z.const('before'), z.const('after'), z.const('skill-injection'), z.const('skill-catalog'), z.const('tool-before'), z.const('tool-after'), z.const('external')]).required(), eventKey: z.string().default(''), eventDisplay: z.string().default(''), inputParameterKey: z.string().default(''), inputParameterDisplay: z.string().default(''),
   toolName: z.string().default(''), groupRouteId: z.string().default(''), groupId: z.string().default(''), groupRoleId: z.string().default(''), pollMinutes: z.number().step(1).min(1).max(1440).default(10), maxPolls: z.number().step(1).min(1).max(1008).default(432),
   input: z.string().default(''), customInput: z.string().default(''), questionSource: z.string().default('configured'),
@@ -96,6 +98,11 @@ const normalize = value => {
     const options = legacy ? (rule.phase === 'before'
       ? [{ id: 'yes', label: '是', action: { type: 'inject-context', text: rule.context } }, { id: 'no', label: '否', action: { type: 'none', text: '' } }]
       : [{ id: 'failed', label: '有失败', action: { type: 'append-reminder', text: rule.context } }, { id: 'success', label: '全部成功', action: { type: 'none', text: '' } }]) : rule.options.map(option => ({ ...option, action: migrateAction(option.action, rule) }));
+    const questionType = rule.questionType || (candidateSource === 'none' ? 'choice' : 'noul');
+    const scoreLevels = rule.scoreLevels;
+    if (scoreLevels.length > 16 || scoreLevels.some(level => level.length > 800)
+      || candidateSource !== 'none' && questionType === 'score' && (scoreLevels.length < 2 || scoreLevels.some(level => !level.trim()) || new Set(scoreLevels).size !== scoreLevels.length)
+      || candidateSource === 'none' && questionType === 'noul' && options.length !== 2) throw new TypeError('Invalid question type or score levels');
     const candidateParameterKey = rule.candidateParameterKey || (rule.phase === 'skill-catalog' ? 'skills' : '');
     const splitMode = rule.splitMode || 'newline';
     const splitText = rule.splitText;
@@ -151,7 +158,7 @@ const normalize = value => {
     return { id: rule.id, enabled: rule.enabled, title: rule.title, description: rule.description, phase: rule.phase, eventKey: rule.eventKey, eventDisplay: rule.eventDisplay, inputParameterKey: rule.inputParameterKey, inputParameterDisplay: rule.inputParameterDisplay, toolName: rule.toolName, input, customInput: rule.customInput,
       candidateSource, candidateText: rule.candidateText, candidateScript: rule.candidateScript, candidateParameterKey, candidateParameterDisplay: rule.candidateParameterDisplay,
       splitMode, splitText, selectionMode, selectionValue, selectionAction, selectionActionText,
-      questionSource: rule.questionSource, questionScript: rule.questionScript, question, options: candidateSource === 'none' ? options : [], threshold: rule.threshold };
+      questionType, scoreLevels, questionSource: rule.questionSource, questionScript: rule.questionScript, question, options: candidateSource === 'none' ? options : [], threshold: rule.threshold };
   });
   // Releases 0.1.38–39 stored native selection beside the ordinary model.
   // Decode that document once into the same provider/model pair used by the picker.

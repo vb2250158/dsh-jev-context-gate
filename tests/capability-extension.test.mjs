@@ -1,3 +1,4 @@
+const noulAnswers = scores => ({ answers: Object.fromEntries(Object.values(scores).map((noul, i) => [`candidate-${i}`, { type: 'noul', noul }])) });
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCapabilityRegistry } from '../src/capability-registry.mjs';
@@ -41,7 +42,7 @@ test('a configured external event uses an installed non-Rabi tool without group 
   const agent = { session: { id: 'session-a' } };
   const outcome = await judge({ settings, phase: 'external', inputs: { 'custom-message': '进度已核实' }, signal: new AbortController().signal,
     createMessage: text => ({ content: [{ type: 'text', text }] }), stream: async function* () {
-      yield { type: 'text-delta', text: JSON.stringify({ 'custom-message': { probabilities: { yes: 0.95, no: 0.05 } } }) };
+      yield { type: 'text-delta', text: JSON.stringify({ answers: { 'custom-message': { type: 'choice', choice: 'yes', confidence: 0.95, probabilities: { yes: 0.95, no: 0.05 } } } }) };
       yield { type: 'finish', reason: { kind: 'stop' } };
     } });
   assert.equal(outcome.decisions[0].status, 'applied');
@@ -63,7 +64,7 @@ test('external event candidates are selected from an event parameter without mut
   const selected = await selectEventCandidates({ settings, rule, parameters: original, input: original.text,
     signal: new AbortController().signal, createMessage: text => ({ content: [{ type: 'text', text }] }),
     stream: async function* () {
-      yield { type: 'text-delta', text: JSON.stringify({ scores: { 'item-1': 0.2, 'item-2': 0.95, 'item-3': 0.8 } }) };
+      yield { type: 'text-delta', text: JSON.stringify(noulAnswers({ 'item-1': 0.2, 'item-2': 0.95, 'item-3': 0.8 })) };
       yield { type: 'finish', reason: { kind: 'stop' } };
     },
   });
@@ -91,7 +92,7 @@ test('external event accepts a single candidate for scoring', async () => {
   const selected = await selectEventCandidates({ settings, rule, parameters: { notices: ['one'] }, input: 'context',
     signal: new AbortController().signal, createMessage: text => ({ content: [{ type: 'text', text }] }),
     stream: async function* () {
-      yield { type: 'text-delta', text: JSON.stringify({ scores: { 'item-1': 0.9 } }) };
+      yield { type: 'text-delta', text: JSON.stringify(noulAnswers({ 'item-1': 0.9 })) };
       yield { type: 'finish', reason: { kind: 'stop' } };
     },
   });

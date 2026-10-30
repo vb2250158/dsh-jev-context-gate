@@ -1,3 +1,4 @@
+const noulAnswers = scores => ({ answers: Object.fromEntries(Object.values(scores).map((noul, i) => [`candidate-${i}`, { type: 'noul', noul }])) });
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rankCatalog } from '../src/catalog-prune.mjs';
@@ -8,8 +9,8 @@ for (const native of [false, true]) test(`${native ? 'native' : 'ordinary'} cand
   const records = [], operations = [];
   const entries = [{ name: 'a', description: 'private skill text' }, { name: 'b', description: 'private skill text' }, { name: 'c', description: 'private skill text' }];
   const scores = { a: 0.3, b: 0.9, c: 0.7 };
-  const stream = async function* (_options, operation) { operations.push(operation); yield { type: 'text-delta', text: JSON.stringify({ scores }) }; yield { type: 'finish', reason: { kind: 'stop' } }; };
-  stream.decide = async (_request, operation) => { operations.push(operation); return { answers: Object.fromEntries(Object.values(scores).map((score, i) => [`candidate-${i}`, { noul: score }])) }; };
+  const stream = async function* (_options, operation) { operations.push(operation); yield { type: 'text-delta', text: JSON.stringify(noulAnswers(scores)) }; yield { type: 'finish', reason: { kind: 'stop' } }; };
+  stream.decide = async (_request, operation) => { operations.push(operation); return { answers: Object.fromEntries(Object.values(scores).map((score, i) => [`candidate-${i}`, { type: 'noul', noul: score }])) }; };
   const session = { append: (type, data, options) => records.push({ type, data, options }) };
   for (const [mode, expected] of [['top', ['b']], ['bottom', ['c']], ['score-above', ['b', 'c']], ['score-below', ['a']]]) {
     const selected = await rankCatalog({ settings: native ? SettingsSchema({ decisionApi: { enabled: true } }) : { provider: 'fixture', model: 'ordinary' },

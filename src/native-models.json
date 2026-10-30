@@ -1,3 +1,418 @@
 [
-  { "provider": "openrouter", "providerName": "OpenRouter", "model": "typesafe/jev-1.13", "name": "Jev 1.13" }
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "baseten/joey-1",
+    "name": "Baseten: Joey 1",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/baseten/joey-1"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "liquid/d1.1",
+    "name": "LiquidAI: d1.1",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/liquid/d1.1"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "~liquid/d1-ultra-latest",
+    "name": "LiquidAI: d1-ultra Latest",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/~liquid/d1-ultra-latest",
+    "aliasTarget": "liquid/d1-ultra"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "~liquid/d1-latest",
+    "name": "LiquidAI: d1 Latest",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/~liquid/d1-latest",
+    "aliasTarget": "liquid/d1.1"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "baseten/mammoth-1",
+    "name": "Baseten: Mammoth 1",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/baseten/mammoth-1"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "baseten/elephant-1",
+    "name": "Baseten: Elephant 1",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/baseten/elephant-1"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "nace-ai/drex-max",
+    "name": "Nace.AI: Drex Max",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/nace-ai/drex-max"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "perplexity/pplx-decider-flash-v1.2",
+    "name": "Perplexity: Decider Flash V1.2",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/perplexity/pplx-decider-flash-v1.2"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "perplexity/pplx-decider-v1.2",
+    "name": "Perplexity: Decider V1.2",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/perplexity/pplx-decider-v1.2"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "~perplexity/pplx-decider-flash-latest",
+    "name": "Perplexity: Decider Flash Latest",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/~perplexity/pplx-decider-flash-latest",
+    "aliasTarget": "perplexity/pplx-decider-flash-v1.2"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "respan/span-02",
+    "name": "Respan: Span-02",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/respan/span-02"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "liquid/d1-ultra",
+    "name": "LiquidAI: d1-ultra",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/liquid/d1-ultra"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "typesafe/jev-1.14",
+    "name": "TypeSafe: Jev 1.14",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/typesafe/jev-1.14",
+    "maxChoices": 255
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "~perplexity/pplx-decider-latest",
+    "name": "Perplexity: Decider Latest",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/~perplexity/pplx-decider-latest",
+    "aliasTarget": "perplexity/pplx-decider-v1.2"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "nace-ai/drex-v2.0",
+    "name": "Nace.AI: Drex v2.0",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/nace-ai/drex-v2.0"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "microsoft/microsoft-decision-1",
+    "name": "Microsoft: Microsoft-Decision-1",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/microsoft/microsoft-decision-1"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "nace-ai/drex-v1.5",
+    "name": "Nace.AI: Drex v1.5",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/nace-ai/drex-v1.5"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "cloudflare/clef-omni",
+    "name": "Cloudflare: Clef Omni",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/cloudflare/clef-omni"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "upstage/solar-decide-flash",
+    "name": "Upstage: Solar Decide Flash",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/upstage/solar-decide-flash"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "openai/gpt-6-luna-decisions",
+    "name": "OpenAI: GPT-6 Luna Decisions",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/openai/gpt-6-luna-decisions",
+    "maxQuestions": 200
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "liquid/d1",
+    "name": "LiquidAI: d1",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/liquid/d1"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "cloudflare/clef-flash",
+    "name": "Cloudflare: Clef Flash",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/cloudflare/clef-flash"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "cloudflare/clef",
+    "name": "Cloudflare: Clef",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/cloudflare/clef"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "inception/mercury-decide",
+    "name": "Inception: Mercury Decide",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/inception/mercury-decide"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "upstage/solar-decide",
+    "name": "Upstage: Solar Decide",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/upstage/solar-decide"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "jaredpalmer/kev-4b",
+    "name": "Jared Palmer: Kev 4B",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/jaredpalmer/kev-4b"
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "~typesafe/jev-latest",
+    "name": "TypeSafe: Jev Latest",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/~typesafe/jev-latest",
+    "aliasTarget": "typesafe/jev-1.14",
+    "maxChoices": 255
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "typesafe/jev-1.13",
+    "name": "TypeSafe: Jev 1.13",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "json",
+    "source": "https://openrouter.ai/typesafe/jev-1.13",
+    "maxChoices": 255
+  },
+  {
+    "provider": "openrouter",
+    "providerName": "OpenRouter",
+    "model": "scaledown/classify-1",
+    "name": "ScaleDown: Classify-1",
+    "protocol": "decisions",
+    "questionTypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "stateFormat": "text-json",
+    "maxScoreLevels": 10,
+    "source": "https://docs.scaledown.ai/api-reference/decisions.md"
+  }
 ]

@@ -2,15 +2,31 @@
 
 English | [简体中文](README.md)
 
-Smart Rules for DSH (package `dsh-jev-context-gate`). Plugins → Smart rules configures event judgements, content selection, and actions; DSH 0.2 reads and writes configuration by the plugin entry ID `dsh-jev-context-gate`. A separate judge model reads selected event content, answers a Choice question, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Select a native OpenRouter Jev model in the same dropdown to use the Decisions API. Ordinary models remain responsible for actions that generate text.
+Smart Rules for DSH (package `dsh-jev-context-gate`). Plugins → Smart rules configures event judgements, content selection, and actions; DSH 0.2 reads and writes configuration by the plugin entry ID `dsh-jev-context-gate`. A separate judge model reads selected event content, answers the configured question type, and activates the action owned by the selected option. Ordinary models use LLM JSON estimates. Select a supported native OpenRouter decision model in the same dropdown to use the Decisions API. Ordinary models remain responsible for actions that generate text.
 
-## Native OpenRouter Jev decisions
+## Three question types
+
+Choose Choice, Noul, or Score at the top of the rule editor and on the test page. Native and JSON compatibility transports share configuration and answer handling. Compatibility probabilities are uncalibrated model estimates.
+
+| Type | Ordinary rules | Candidate selection |
+| --- | --- | --- |
+| Choice | Select one option and apply its probability threshold | Compare candidates in one probability distribution |
+| Noul | Exactly two options: yes first, no second | Judge each candidate independently |
+| Score | Order options low to high; choose the nearest expected level and apply that level's probability threshold | Grade each candidate against configured ordered levels and normalize its expected level to 0–100% |
+
+Existing rules retain their behavior: Choice for ordinary rules and Noul for candidates. Switching type preserves options and actions; Noul requires two options before saving. Native requests use each model's declared question limit (200 for GPT); cancellation prevents later batches. Mutually exclusive options are never split into independent Choice questions.
+
+See [native model support](docs/native-models_en.md) for the reviewed OpenRouter catalog and specialized protocols. Ordinary chat models support all three types through JSON compatibility. Text-generation actions continue to use `messageModel`.
+
+Native request diagnostics include credential resolution, response-header wait, response-body reading, and validation when the statistics plugin is installed. Header wait includes network and server waiting; it does not isolate inference time. Missing confidence is labeled as distribution concentration; missing required probabilities fail visibly without fabricated distributions or automatic paid fallback requests.
+
+## Native decision configuration
 
 Use the existing decision-model dropdown in Plugins → Smart rules. Native probability models appear first without an extra label; ordinary models carry a compatibility-mode label. Select OpenRouter · Jev 1.13 to use the native Decisions API, or select an ordinary model for the existing LLM JSON judgement. There is no separate native switch.
 
 Configure `OPENROUTER_API_KEY` in the DSH credential store. The `provider` and `model` fields own the active decision selection; `decisionApi.apiKeyRef` and `decisionApi.timeoutMs` configure credentials and timeout. Settings from 0.1.38–0.1.39 migrate to the OpenRouter selection and retain the previous ordinary model in `messageModel` for text-generation actions. Choosing another ordinary model updates that text model. A text-generation action fails explicitly if native selection has no saved ordinary text model.
 
-Rule options use native Choice probabilities; candidates use independent Noul probabilities in one request. Existing thresholds, ranking and counts remain. The test page shows the served model, probabilities, native confidence and duration. Failed or refused requests and invalid probabilities do not activate actions or silently fall back. Native requests are not yet included in individual LLM-call statistics.
+The selected question type controls native and compatibility requests. Failed or refused requests and invalid probabilities do not activate actions or silently fall back. Native calls participate in the optional statistics service.
 
 ## Context lifecycle policy
 
@@ -58,7 +74,7 @@ Option sources include manual configuration, splitting judgement input by newlin
 
 ## 0.1.16
 
-The rule editor now exposes the top count directly. Change Skill trimming from 10 to 5 there. Candidate scoring uses one model request per batch of up to 100 items, with a finalist pass for larger sets; it does not send a separate request for each Skill. The relevance threshold applies even when the candidate count is below the top count.
+The rule editor now exposes the top count directly. Change Skill trimming from 10 to 5 there. Candidate scoring places the questions in one request or model-limited batches; it does not send a separate request for each Skill or run a finalist pass. The relevance threshold applies even when the candidate count is below the top count.
 
 For a custom list, add a rule for the user-message event, choose custom candidate filtering, enter one item per line, and configure the judgement input, question, threshold, and top count. Selected items enter the current conversation. A candidate script can instead return strings or `{ id, text }` entries and may read local files. Lists contain 2–500 items, at most 64000 characters in total; the top count is 1–50.
 

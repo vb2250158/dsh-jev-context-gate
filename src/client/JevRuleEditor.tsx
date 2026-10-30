@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Button, Input, Menu, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import { EVENT_DEFINITIONS, optionParametersForEvent } from '../event-parameters.mjs'
 import styles from './JevSettingsSection.module.css'
+import { QuestionTypePicker, type QuestionType } from './QuestionTypePicker.tsx'
 
 export type Action = { type: 'none' | 'inject-context' | 'inject-skill' | 'append-reminder' | 'skip-skill' | 'keep-top-skills' | 'inject-selected-candidates' | 'deny-tool' | 'dispatch'; text: string; params?: { key: string; display: string; value: string }[] }
 export type RuleOption = { id: string; label: string; action: Action }
@@ -12,6 +13,7 @@ export type Rule = {
   splitMode: 'space' | 'newline' | 'literal'; splitText: string
   selectionMode: 'score-below' | 'score-above' | 'top' | 'bottom'; selectionValue: string
   selectionAction: 'prune' | 'inject-extra'; selectionActionText: string
+  questionType?: QuestionType; scoreLevels?: string[]
   questionSource: 'configured' | 'script'; questionScript: string; question: string
   options: RuleOption[]; threshold: number
 }
@@ -108,6 +110,8 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
       selectionMode: 'top', selectionValue: '10', selectionAction: 'prune', selectionActionText: '', options: [] })
   }
   const ranking = rule.candidateSource !== 'none'
+  const questionType = rule.questionType ?? (ranking ? 'noul' : 'choice')
+  const invalidNoulOptions = !ranking && questionType === 'noul' && rule.options.length !== 2
   const sourceDescription = rule.input === 'custom-text'
     ? '使用下方输入的固定文字；每次事件发生都会读取它。'
     : rule.input === 'user-message-with-skills'
@@ -141,8 +145,12 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
       <div className={styles.ruleControls}><Switch checked={rule.enabled} disabled={!writable} label={`启用${displayTitle}`} onChange={enabled => set({ enabled })} /><Button variant="outline" size="sm" onClick={openEditor}>编辑</Button></div>
     </div>
     <Modal open={editing} onClose={closeEditor} title={displayTitle} closeLabel="关闭规则编辑" className={styles.ruleEditorModal} contentClassName={styles.ruleEditorContent}
-      footer={<><Button variant="ghost" size="sm" onClick={closeEditor}>取消</Button><Button variant="primary" size="sm" disabled={!canSave || saving} onClick={saveEditor}>{saving ? '正在保存…' : '保存规则'}</Button></>}>
+      footer={<><Button variant="ghost" size="sm" onClick={closeEditor}>取消</Button><Button variant="primary" size="sm" disabled={!canSave || saving || invalidNoulOptions} onClick={saveEditor}>{saving ? '正在保存…' : '保存规则'}</Button></>}>
       <div className={styles.ruleBody}>
+      <QuestionTypePicker value={questionType} disabled={!writable} onChange={questionType => set({ questionType })} />
+      <p className={styles.note}>{questionType === 'choice' ? '选择题：各选项相互竞争，返回概率分布。' : questionType === 'noul' ? ranking ? '判断题：独立判断每个候选是否符合题目，返回符合概率。' : '判断题：第一项对应“是”，第二项对应“否”；执行概率达到阈值的结果。' : ranking ? '评分题：按下方从低到高的等级评价每个候选，归一为 0–100% 后筛选。' : '评分题：下方选项按等级从低到高排列。按期望分数最接近的等级执行动作，该等级概率须达到执行阈值。'}</p>
+      {invalidNoulOptions && <p className={styles.error} role="alert">判断题需要两个选项。现有选项和动作已保留，请移除多余项，或切回原题型。</p>}
+      {ranking && questionType === 'score' && <label className={styles.field}>评分等级（从低到高，每行一级）<textarea className={styles.textarea} rows={3} disabled={!writable} value={(rule.scoreLevels ?? ['不相关', '部分相关', '高度相关']).join('\n')} onChange={event => set({ scoreLevels: event.currentTarget.value.split('\n') })} /></label>}
       <label className={styles.field}>规则标题<Input value={rule.title} maxLength={120} disabled={!writable} placeholder="例如：先查证据" onChange={event => set({ title: event.currentTarget.value })} /></label>
       <label className={styles.field}>规则说明<Input value={rule.description} maxLength={500} disabled={!writable} placeholder="用一句话说明这条规则的用途" onChange={event => set({ description: event.currentTarget.value })} /></label>
       <div className={styles.ruleStage}>
@@ -211,10 +219,10 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
         {rule.selectionAction === 'inject-extra' && <label className={styles.field}>额外内容<textarea className={styles.textarea} value={rule.selectionActionText} maxLength={8000} disabled={!writable} rows={3} placeholder="可用 {selected} 插入筛选出的选项" onChange={event => set({ selectionActionText: event.currentTarget.value })} /></label>}
         <p className={styles.actionPreview}>每个选项只评分一次。{rule.selectionAction === 'prune' ? rule.phase === 'skill-catalog' ? '把筛选结果返回给 Skill 目录事件，替换本次目录。' : rule.phase === 'external' ? '把入选项交还事件提供者，由提供者裁剪它拥有的内容。' : '仅把筛选结果传入本次会话，保留原用户消息。' : '选中至少一项时注入上方内容；{selected} 表示入选项。'}</p>
       </div>}
-      <div className={styles.ruleStage}><div className={styles.stageHeading}><strong>{ranking ? '动态选项' : '选项与行为'}</strong>{!ranking && <span>{rule.options.length} 个选项</span>}</div>
+      <div className={styles.ruleStage}><div className={styles.stageHeading}><strong>{ranking ? '动态选项' : questionType === 'score' ? '评分等级与行为（从低到高）' : '选项与行为'}</strong>{!ranking && <span>{rule.options.length} 个选项</span>}</div>
         {ranking && <p className={styles.actionPreview}>模型一次接收全部选项并返回每项评分；此处的选项来自上方选择的内容或事件参数。</p>}
         {!ranking && <div className={styles.ruleOptions}>{rule.options.map((option, optionIndex) => <div className={styles.ruleOption} key={option.id}>
-          <div className={styles.optionTitle}><span className={styles.optionLetter}>{String.fromCharCode(65 + optionIndex)}</span><label className={styles.field}>选项文案<Input value={option.label} maxLength={800} disabled={!writable} aria-label={`${displayTitle}，选项 ${optionIndex + 1}`} onChange={event => updateOption(option.id, { label: event.currentTarget.value })} /></label>
+          <div className={styles.optionTitle}><span className={styles.optionLetter}>{questionType === 'noul' ? optionIndex === 0 ? '是' : optionIndex === 1 ? '否' : '多余' : questionType === 'score' ? optionIndex : String.fromCharCode(65 + optionIndex)}</span><label className={styles.field}>选项文案<Input value={option.label} maxLength={800} disabled={!writable} aria-label={`${displayTitle}，选项 ${optionIndex + 1}`} onChange={event => updateOption(option.id, { label: event.currentTarget.value })} /></label>
             <Button variant="ghost" size="sm" disabled={!writable || rule.options.length <= 2} onClick={() => set({ options: rule.options.filter(item => item.id !== option.id) })}>移除</Button></div>
           <div className={styles.optionActionControls}>
             <Choice label="命中后" value={option.action.type} disabled={!writable} choices={rule.phase === 'before'
@@ -259,7 +267,7 @@ export function JevRuleEditor({ rule, editing, writable, saving, canSave, error,
               </div>}</div>
             : <p className={styles.actionPreview}>{option.action.text.trim() || '尚未填写动作内容'}</p>)}
         </div>)}</div>}
-        {!ranking && <Button variant="outline" size="sm" disabled={!writable || rule.options.length >= 16} onClick={() => set({ options: [...rule.options, { id: `option-${crypto.randomUUID().replaceAll('-', '')}`, label: '', action: { type: 'none', text: '' } }] })}>添加选项</Button>}
+        {!ranking && <Button variant="outline" size="sm" disabled={!writable || rule.options.length >= (questionType === 'noul' ? 2 : 16)} onClick={() => set({ options: [...rule.options, { id: `option-${crypto.randomUUID().replaceAll('-', '')}`, label: '', action: { type: 'none', text: '' } }] })}>添加选项</Button>}
       </div>
       <div className={styles.ruleFooter}><Button variant="ghost" size="sm" disabled={!writable} onClick={remove}>删除规则</Button></div>
       {error && <p className={styles.error} role="alert">{error}</p>}

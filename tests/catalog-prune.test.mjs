@@ -23,12 +23,12 @@ test('Skill 裁剪 uses current visible context and rule-configured count, title
     entries, input, signal, createMessage,
     stream: async function* (options) {
       prompts.push(JSON.parse(options.messages[0].content[0].text));
-      yield { type: 'text-delta', text: JSON.stringify({ scores: Object.fromEntries(entries.map((entry, index) => [entry.name, index / 12])) }) };
+      yield { type: 'text-delta', text: JSON.stringify({ answers: Object.fromEntries(entries.map((entry, index) => [`candidate-${index}`, { type: 'noul', noul: index / 12 }])) }) };
       yield { type: 'finish', reason: { kind: 'stop' } };
     },
   });
-  assert.equal(prompts[0].question, '与上下文最相关的 Skill 有哪些？');
-  assert.equal(prompts[0].options.length, 12);
+  assert.match(prompts[0].questions['candidate-0'].instructions, /与上下文最相关/);
+  assert.equal(Object.keys(prompts[0].questions).length, 12);
   assert.deepEqual(selected.map(entry => entry.name), ['skill-11', 'skill-10', 'skill-9']);
   const original = { source: { kind: 'skill-catalog', form: 'catalog', entries }, content: [{ type: 'text', text: '<available_skills>\nall\n</available_skills>' }] };
   const pruned = pruneCatalogMessage(original, selected, value => value);
@@ -41,6 +41,6 @@ test('Skill 裁剪 uses current visible context and rule-configured count, title
 test('invalid catalog ranking never publishes a fabricated selection', async () => {
   await assert.rejects(() => rankCatalog({ settings: { provider: 'test', model: 'ordinary' }, rule, entries,
     input: '任务', signal, createMessage,
-    stream: async function* () { yield { type: 'text-delta', text: '{"scores":{"skill-0":1}}' }; yield { type: 'finish', reason: { kind: 'stop' } }; },
-  }), /Invalid catalog judgement scores/);
+    stream: async function* () { yield { type: 'text-delta', text: '{"answers":{"candidate-0":{"type":"noul","noul":1}}}' }; yield { type: 'finish', reason: { kind: 'stop' } }; },
+  }), /Invalid decision answers/);
 });

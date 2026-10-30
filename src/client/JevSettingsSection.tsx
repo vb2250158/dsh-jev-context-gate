@@ -3,7 +3,7 @@ import { Button, Menu, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ModelCatalog } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import styles from './JevSettingsSection.module.css'
-import { modeForModel } from '../mode.mjs'
+import { modeForModel, unsupportedModelReason } from '../mode.mjs'
 import { modelChoices, selectionPatch } from '../model-selection.mjs'
 import { validateRules } from '../policy.mjs'
 import { groupRulePresets } from '../settings.mjs'
@@ -35,6 +35,11 @@ function validateDraft(rules: DraftRule[]): Rule[] {
       ? !/^[1-9][0-9]*$/.test(rule.selectionValue) || !Number.isSafeInteger(Number(rule.selectionValue))
       : !rule.selectionValue.trim() || !Number.isFinite(Number(rule.selectionValue)) || Number(rule.selectionValue) < 0 || Number(rule.selectionValue) > 100)) throw new Error(`${label}的筛选目标 N 无效。`)
     if (rule.candidateSource !== 'none' && rule.selectionAction === 'inject-extra' && !rule.selectionActionText.trim()) throw new Error(`${label}缺少额外注入内容。`)
+    if (rule.candidateSource === 'none' && rule.questionType === 'noul' && rule.options.length !== 2) throw new Error(`${label}的判断题需要两个选项，第一项为是，第二项为否。`)
+    if (rule.candidateSource !== 'none' && rule.questionType === 'score') {
+      const levels = rule.scoreLevels ?? ['不相关', '部分相关', '高度相关']
+      if (levels.length < 2 || levels.length > 16 || levels.some(level => !level.trim() || level.length > 800) || new Set(levels.map(level => level.trim())).size !== levels.length) throw new Error(`${label}需要 2 至 16 个不重复的评分等级。`)
+    }
     if (rule.options.some(option => option.action.type === 'inject-skill' && (option.action.text.length > 120 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(option.action.text)))) throw new Error(`${label}的 Skill 名称应为 120 字以内的小写字母、数字和连字符。`)
     if (rule.phase.startsWith('tool-') && !rule.toolName.trim()) throw new Error(`${label}需要选择监听的工具。`)
     if (rule.phase === 'external' && (!rule.eventKey.trim() || rule.input === 'event-param' && !rule.inputParameterKey.trim())) throw new Error(`${label}需要事件 key 和待判断参数 key。`)
@@ -83,15 +88,16 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
       .finally(() => { migrating.current = false })
   }, [current, snapshot.writable, scope])
   const writable = snapshot.writable && snapshot.status === 'ready' && current !== undefined && !saving
-  const savedRules = current ? JSON.stringify(current.rules) : null
+  const savedRules = current ? JSON.stringify(validateRules(current.rules)) : null
   const dirty = draftRules !== null && sourceRules !== null && JSON.stringify(draftRules) !== JSON.stringify(toDraft(JSON.parse(sourceRules) as Rule[]))
   const changedElsewhere = dirty && savedRules !== sourceRules
   const modelMode = modeForModel(current?.model ?? '', current?.provider)
+  const unsupported = unsupportedModelReason(current?.model ?? '', current?.provider)
 
   React.useEffect(() => {
     if (!current || (draftRules !== null && dirty)) return
     setDraftRules(toDraft(current.rules))
-    setSourceRules(JSON.stringify(current.rules))
+    setSourceRules(JSON.stringify(validateRules(current.rules)))
     setEditingRule(null)
   }, [savedRules])
 
@@ -102,7 +108,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
   const discardRules = (): void => {
     if (!current) return
     setDraftRules(toDraft(current.rules))
-    setSourceRules(JSON.stringify(current.rules))
+    setSourceRules(JSON.stringify(validateRules(current.rules)))
     setRulesError(undefined)
   }
   const saveRules = async (): Promise<boolean> => {
@@ -117,7 +123,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
     try {
       await scope.mutate([{ op: 'set', path: ['rules'], value: rules }])
       setDraftRules(toDraft(rules))
-      setSourceRules(JSON.stringify(rules))
+      setSourceRules(JSON.stringify(validateRules(rules)))
       return true
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error))
@@ -164,7 +170,7 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
   return <section className={styles.section}>
     <header className={styles.pageHeader}>
       <div><h2>智能规则配置</h2></div>
-      <div className={styles.headerActions}>{current && <span className={current.enabled ? styles.statusOn : styles.statusOff}>{current.enabled ? '已启用' : '未启用'}</span>}<Button variant="primary" size="sm" onClick={() => setPage('test')}>打开测试页面</Button></div>
+      <div className={styles.headerActions}>{current && <span className={current.enabled ? styles.statusOn : styles.statusOff}>{current.enabled ? '已启用' : '未启用'}</span>}<Button variant="primary" size="sm" disabled={saving} onClick={() => setPage('test')}>打开测试页面</Button></div>
     </header>
     {snapshot.status !== 'ready' || !current ? <p role="status">{snapshot.status === 'loading' ? '正在读取设置…' : '设置不可用，无法读取或保存。'}</p> : <>
       {!snapshot.writable && <p role="status">当前设置只读，无法保存修改。</p>}
@@ -190,7 +196,8 @@ function Loaded({ scope, loadCatalog }: Injected): React.ReactNode {
         {catalogError && <p className={styles.error} role="alert">模型目录加载失败：{catalogError}</p>}
         {catalog?.failures.map(failure => <p className={styles.error} key={failure.id}>模型目录部分加载失败：{failure.name}：{failure.message}</p>)}
         {catalog && models.length === 0 && <p className={styles.note}>目录暂无可选模型；已有配置不会被自动清除。</p>}
-        <div className={styles.testModel}><span>当前判定模型：{current.provider && current.model ? `${current.provider} · ${current.model}` : '未选择'}</span>{modelMode !== 'jev-native' && <span className={styles.modeBadge}>{modelMode === 'llm-json' ? '兼容模式' : '待配置'}</span>}</div>
+        <div className={styles.testModel}><span>当前判定模型：{current.provider && current.model ? `${current.provider} · ${current.model}` : '未选择'}</span>{(modelMode === 'llm-json' || modelMode === 'unconfigured' || modelMode === 'unsupported') && <span className={styles.modeBadge}>{modelMode === 'llm-json' ? '兼容模式' : modelMode === 'unsupported' ? '不支持通用题型' : '待配置'}</span>}</div>
+        {unsupported && <p className={styles.error} role="alert">{unsupported}</p>}
         <p className={styles.note}>支持概率判定的模型优先显示；普通模型标注“兼容模式”，使用 LLM JSON 判定。</p>
       </div>
 

@@ -23,7 +23,7 @@ test('ordinary model choice test reports every option and distribution concentra
   let request;
   const result = await testChoice({ ...input, stream: options => {
     request = options;
-    return chunks('{"probabilities":{"option-1":0.8,"option-2":0.15,"option-3":0.05}}');
+    return chunks('{"answers":{"choice":{"type":"choice","choice":"option-1","confidence":0.8,"probabilities":{"option-1":0.8,"option-2":0.15,"option-3":0.05}}}}');
   } });
   assert.equal(request.provider, settings.provider);
   assert.equal(request.model, settings.model);
@@ -37,15 +37,15 @@ test('ordinary model choice test reports every option and distribution concentra
 });
 
 test('flat and peaked distributions produce distinct concentration values', async () => {
-  const flat = await testChoice({ ...input, options: ['是', '否'], stream: () => chunks('{"probabilities":{"option-1":0.5,"option-2":0.5}}') });
-  const peak = await testChoice({ ...input, options: ['是', '否'], stream: () => chunks('{"probabilities":{"option-1":1,"option-2":0}}') });
+  const flat = await testChoice({ ...input, options: ['是', '否'], stream: () => chunks('{"answers":{"choice":{"type":"choice","choice":"option-1","confidence":0.8,"probabilities":{"option-1":0.5,"option-2":0.5}}}}') });
+  const peak = await testChoice({ ...input, options: ['是', '否'], stream: () => chunks('{"answers":{"choice":{"type":"choice","choice":"option-1","confidence":0.8,"probabilities":{"option-1":1,"option-2":0}}}}') });
   assert.equal(flat.confidence, 0);
   assert.equal(peak.confidence, 1);
 });
 
 test('invalid probabilities and tool calls fail instead of displaying invented results', async () => {
-  await assert.rejects(() => testChoice({ ...input, stream: () => chunks('{"probabilities":{"option-1":0.9,"option-2":0.9,"option-3":0.9}}') }), /之和/);
-  await assert.rejects(() => testChoice({ ...input, stream: () => chunks('{"probabilities":{"option-1":1}}') }), /格式/);
+  await assert.rejects(() => testChoice({ ...input, stream: () => chunks('{"answers":{"choice":{"type":"choice","choice":"option-1","confidence":0.8,"probabilities":{"option-1":0.9,"option-2":0.9,"option-3":0.9}}}}') }), /Invalid decision choice/);
+  await assert.rejects(() => testChoice({ ...input, stream: () => chunks('{"answers":{"choice":{"type":"choice","choice":"option-1","confidence":0.8,"probabilities":{"option-1":1}}}}') }), /Invalid decision choice/);
   const toolCall = async function* () { yield { type: 'tool-call-delta' }; }();
   await assert.rejects(() => testChoice({ ...input, stream: () => toolCall }), /不得调用工具/);
 });
